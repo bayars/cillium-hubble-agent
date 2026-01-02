@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - DEMO_MODE=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - monitor-net
+
+  # Network Monitor Agent (example - runs on host or in sidecar)
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      - API_URL=http://api:8000/api/events
+      - WS_URL=ws://api:8000/ws/agent
+      - LOG_LEVEL=INFO
+      - POLL_INTERVAL_MS=100
+      # - INTERFACES=eth0,eth1  # Uncomment to filter interfaces
+    volumes:
+      # Mount sysfs for interface statistics (read-only)
+      - /sys/class/net:/sys/class/net:ro
+    # Required for netlink socket access
+    cap_add:
+      - NET_ADMIN
+    network_mode: host  # Required for monitoring host interfaces
+    depends_on:
+      - api
+
+networks:
+  monitor-net:
+    driver: bridge
+
+# Example usage with containerlab:
+#
+# 1. Run API server:
+#    docker-compose up api
+#
+# 2. Deploy agent as sidecar in containerlab topology:
+#    Add to each node in topology.yml:
+#
+#    nodes:
+#      router1:
+#        kind: srl
+#        exec:
+#          - docker run -d --net=container:clab-topo-router1 \
+#              -v /sys/class/net:/sys/class/net:ro \
+#              -e API_URL=http://host.docker.internal:8000/api/events \
+#              network-monitor-agent
+#
+# 3. Or run agent on the containerlab host:
+#    docker-compose up agent

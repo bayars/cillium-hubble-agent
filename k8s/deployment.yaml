@@ -1,0 +1,146 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: network-monitor
+  labels:
+    app.kubernetes.io/name: network-monitor
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: network-monitor
+  namespace: network-monitor
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: network-monitor
+rules:
+  # Access to CiliumEndpoint resources
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpoints"]
+    verbs: ["get", "list", "watch"]
+  # Access to pods for metadata
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: network-monitor
+subjects:
+  - kind: ServiceAccount
+    name: network-monitor
+    namespace: network-monitor
+roleRef:
+  kind: ClusterRole
+  name: network-monitor
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-monitor
+  namespace: network-monitor
+  labels:
+    app.kubernetes.io/name: network-monitor
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: network-monitor
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: network-monitor
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: network-monitor
+      containers:
+        - name: api
+          image: 10.0.0.100/library/network-monitor:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: DEMO_MODE
+              value: "false"
+            # Hubble Relay configuration
+            - name: DISCOVERY_MODE
+              value: "hubble"
+            - name: HUBBLE_RELAY_ADDR
+              value: "hubble-relay.kube-system.svc.cluster.local:4245"
+            - name: IDLE_TIMEOUT_SECONDS
+              value: "5"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-monitor
+  namespace: network-monitor
+  labels:
+    app.kubernetes.io/name: network-monitor
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: network-monitor
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+
+---
+# Optional: Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: network-monitor
+  namespace: network-monitor
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: network-monitor.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: network-monitor
+                port:
+                  number: 8000

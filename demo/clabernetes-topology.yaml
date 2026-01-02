@@ -1,0 +1,301 @@
+---
+# Namespace for Clabernetes topologies
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clab
+  labels:
+    app.kubernetes.io/name: clabernetes
+
+---
+# SR Linux spine1 configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spine1-startup-config
+  namespace: clab
+data:
+  startup-config.json: |
+    {
+      "interface": [
+        {
+          "name": "ethernet-1/1",
+          "admin-state": "enable",
+          "subinterface": [
+            {
+              "index": 0,
+              "admin-state": "enable",
+              "ipv4": {
+                "admin-state": "enable",
+                "address": [
+                  {
+                    "ip-prefix": "10.0.1.1/30"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ethernet-1/2",
+          "admin-state": "enable",
+          "subinterface": [
+            {
+              "index": 0,
+              "admin-state": "enable",
+              "ipv4": {
+                "admin-state": "enable",
+                "address": [
+                  {
+                    "ip-prefix": "10.0.2.1/30"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "network-instance": [
+        {
+          "name": "default",
+          "type": "default",
+          "admin-state": "enable",
+          "interface": [
+            { "name": "ethernet-1/1.0" },
+            { "name": "ethernet-1/2.0" }
+          ],
+          "protocols": {
+            "bgp": {
+              "admin-state": "enable",
+              "autonomous-system": 65000,
+              "router-id": "1.1.1.1",
+              "group": [
+                {
+                  "group-name": "leaves",
+                  "peer-as": 65001
+                }
+              ],
+              "neighbor": [
+                {
+                  "peer-address": "10.0.1.2",
+                  "peer-group": "leaves"
+                },
+                {
+                  "peer-address": "10.0.2.2",
+                  "peer-group": "leaves"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+
+---
+# FRR daemons configuration (shared)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frr-daemons
+  namespace: clab
+data:
+  daemons: |
+    zebra=yes
+    bgpd=yes
+    ospfd=no
+    ospf6d=no
+    ripd=no
+    ripngd=no
+    isisd=no
+    pimd=no
+    ldpd=no
+    nhrpd=no
+    eigrpd=no
+    babeld=no
+    sharpd=no
+    staticd=yes
+    pbrd=no
+    bfdd=no
+    fabricd=no
+    vrrpd=no
+
+---
+# FRR leaf1 configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: leaf1-frr-config
+  namespace: clab
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname leaf1
+    log syslog informational
+    service integrated-vtysh-config
+    !
+    interface eth1
+     ip address 10.0.1.2/30
+     description to-spine1
+    exit
+    !
+    interface eth2
+     ip address 10.0.12.1/30
+     description to-leaf2
+    exit
+    !
+    interface eth3
+     ip address 10.1.1.1/24
+     description to-tgen1
+    exit
+    !
+    router bgp 65001
+     bgp router-id 2.2.2.2
+     neighbor 10.0.1.1 remote-as 65000
+     neighbor 10.0.1.1 description spine1
+     neighbor 10.0.12.2 remote-as 65001
+     neighbor 10.0.12.2 description leaf2
+     !
+     address-family ipv4 unicast
+      network 10.1.1.0/24
+      neighbor 10.0.1.1 activate
+      neighbor 10.0.12.2 activate
+     exit-address-family
+    exit
+    !
+    line vty
+    !
+
+---
+# FRR leaf2 configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: leaf2-frr-config
+  namespace: clab
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname leaf2
+    log syslog informational
+    service integrated-vtysh-config
+    !
+    interface eth1
+     ip address 10.0.2.2/30
+     description to-spine1
+    exit
+    !
+    interface eth2
+     ip address 10.0.12.2/30
+     description to-leaf1
+    exit
+    !
+    interface eth3
+     ip address 10.2.1.1/24
+     description to-tgen2
+    exit
+    !
+    router bgp 65001
+     bgp router-id 3.3.3.3
+     neighbor 10.0.2.1 remote-as 65000
+     neighbor 10.0.2.1 description spine1
+     neighbor 10.0.12.1 remote-as 65001
+     neighbor 10.0.12.1 description leaf1
+     !
+     address-family ipv4 unicast
+      network 10.2.1.0/24
+      neighbor 10.0.2.1 activate
+      neighbor 10.0.12.1 activate
+     exit-address-family
+    exit
+    !
+    line vty
+    !
+
+---
+# Clabernetes Topology Custom Resource
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Topology
+metadata:
+  name: network-monitor-demo
+  namespace: clab
+  labels:
+    app.kubernetes.io/name: network-monitor-demo
+    app.kubernetes.io/part-of: network-monitor
+spec:
+  naming: prefixed
+
+  expose:
+    disableAutoExpose: false
+    exposeType: ClusterIP
+
+
+
+  definition:
+    containerlab: |
+      name: network-monitor-demo
+
+      topology:
+        kinds:
+          srl:
+            image: ghcr.io/nokia/srlinux:24.3.2
+            type: ixrd2l
+
+        nodes:
+          spine1:
+            kind: srl
+
+          leaf1:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+
+          leaf2:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+
+          tgen1:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.1.1.10/24 dev eth1 || true
+              - ip route add 10.2.1.0/24 via 10.1.1.1 || true
+
+          tgen2:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.2.1.10/24 dev eth1 || true
+              - ip route add 10.1.1.0/24 via 10.2.1.1 || true
+
+        links:
+          - endpoints: ["spine1:e1-1", "leaf1:eth1"]
+          - endpoints: ["spine1:e1-2", "leaf2:eth1"]
+          - endpoints: ["leaf1:eth2", "leaf2:eth2"]
+          - endpoints: ["leaf1:eth3", "tgen1:eth1"]
+          - endpoints: ["leaf2:eth3", "tgen2:eth1"]
+
+  deployment:
+    filesFromConfigMap:
+      spine1:
+        - configMapName: spine1-startup-config
+          configMapPath: startup-config.json
+          filePath: /tmp/startup-config.json
+      leaf1:
+        - configMapName: leaf1-frr-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons
+      leaf2:
+        - configMapName: leaf2-frr-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons

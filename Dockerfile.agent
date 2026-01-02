@@ -1,0 +1,25 @@
+# Network Monitor Agent - Runs inside router container or sidecar
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy agent code only
+COPY agent/ ./agent/
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV POLL_INTERVAL_MS=100
+
+# Run agent
+CMD ["python", "-m", "agent.main"]

@@ -1,0 +1,75 @@
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.un~
+
+# Testing
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit these)
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.yaml
+
+# Kubernetes local
+kubeconfig
+*.kubeconfig
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Do NOT ignore demo directory
+!demo/
+!demo/**
