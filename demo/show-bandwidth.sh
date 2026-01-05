@@ -14,17 +14,17 @@ curl -s "$API_URL/api/links" | jq -r '
   (.links[] | [
     .id,
     .state,
-    (if .metrics.rx_bps >= 1073741824 then "\(.metrics.rx_bps / 1073741824 | . * 10 | floor / 10) Gbps"
-     elif .metrics.rx_bps >= 1048576 then "\(.metrics.rx_bps / 1048576 | floor) Mbps"
-     elif .metrics.rx_bps >= 1024 then "\(.metrics.rx_bps / 1024 | floor) Kbps"
-     else "\(.metrics.rx_bps | floor) bps" end),
-    (if .metrics.tx_bps >= 1073741824 then "\(.metrics.tx_bps / 1073741824 | . * 10 | floor / 10) Gbps"
-     elif .metrics.tx_bps >= 1048576 then "\(.metrics.tx_bps / 1048576 | floor) Mbps"
-     elif .metrics.tx_bps >= 1024 then "\(.metrics.tx_bps / 1024 | floor) Kbps"
-     else "\(.metrics.tx_bps | floor) bps" end),
+    (if .metrics.rx_bps >= 1073741824 then "\(.metrics.rx_bps / 1073741824 | . * 10 | floor / 10)_Gbps"
+     elif .metrics.rx_bps >= 1048576 then "\(.metrics.rx_bps / 1048576 | floor)_Mbps"
+     elif .metrics.rx_bps >= 1024 then "\(.metrics.rx_bps / 1024 | floor)_Kbps"
+     else "\(.metrics.rx_bps | floor)_bps" end),
+    (if .metrics.tx_bps >= 1073741824 then "\(.metrics.tx_bps / 1073741824 | . * 10 | floor / 10)_Gbps"
+     elif .metrics.tx_bps >= 1048576 then "\(.metrics.tx_bps / 1048576 | floor)_Mbps"
+     elif .metrics.tx_bps >= 1024 then "\(.metrics.tx_bps / 1024 | floor)_Kbps"
+     else "\(.metrics.tx_bps | floor)_bps" end),
     "\(.metrics.utilization * 100 | floor)%"
   ]) | @tsv
-' | column -t
+' | column -t | sed 's/_/ /g'
 
 echo ""
 echo "Legend: RX=Receive, TX=Transmit, UTIL=Utilization"
