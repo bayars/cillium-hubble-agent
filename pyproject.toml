@@ -1,0 +1,61 @@
+[project]
+name = "network-monitor"
+version = "1.0.0"
+description = "Real-time network interface monitoring system with Clabernetes lab management"
+requires-python = ">=3.11"
+dependencies = [
+    # Netlink monitoring (for sysfs/netlink mode)
+    "pyroute2>=0.7.12",
+
+    # FastAPI & Server
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+
+    # Data validation
+    "pydantic>=2.5.0",
+
+    # Async support
+    "asyncio-throttle>=1.0.2",
+    "aiohttp>=3.9.0",
+
+    # gRPC for Hubble Relay
+    "grpcio>=1.60.0",
+    "grpcio-tools>=1.60.0",
+    "protobuf>=4.25.0",
+
+    # Kubernetes API for CiliumEndpoint discovery and lab management
+    "kubernetes-asyncio>=29.0.0",
+
+    # YAML parsing for topology import
+    "pyyaml>=6.0",
+
+    # Environment variables
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["api", "agent"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests", "samples"]
