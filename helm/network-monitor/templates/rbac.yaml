@@ -1,0 +1,40 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "network-monitor.fullname" . }}
+  labels:
+    {{- include "network-monitor.labels" . | nindent 4 }}
+rules:
+  # Access to CiliumEndpoint resources
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpoints"]
+    verbs: ["get", "list", "watch"]
+  # Access to pods for metadata
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # Access to namespaces for lab management
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create"]
+  # Access to Clabernetes Topology resources for lab management
+  - apiGroups: ["clabernetes.containerlab.dev"]
+    resources: ["topologies"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "network-monitor.fullname" . }}
+  labels:
+    {{- include "network-monitor.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "network-monitor.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "network-monitor.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

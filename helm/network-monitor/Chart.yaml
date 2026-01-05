@@ -1,0 +1,13 @@
+apiVersion: v2
+name: network-monitor
+description: Real-time network interface monitoring system with Clabernetes lab management
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - network
+  - monitoring
+  - containerlab
+  - clabernetes
+maintainers:
+  - name: Network Monitor Team

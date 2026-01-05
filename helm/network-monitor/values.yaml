@@ -1,0 +1,53 @@
+# Default values for network-monitor
+
+replicaCount: 1
+
+image:
+  repository: 10.0.0.100/library/network-monitor-v2
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: LoadBalancer
+  port: 8000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Application configuration
+config:
+  logLevel: INFO
+  demoMode: "false"
+  discoveryMode: hubble
+  hubbleRelayAddr: hubble-relay.kube-system.svc.cluster.local:4245
+  idleTimeoutSeconds: "5"
+
+# Probes
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# RBAC
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Ingress
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  host: network-monitor.local

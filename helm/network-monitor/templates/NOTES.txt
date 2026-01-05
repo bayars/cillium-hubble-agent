@@ -1,0 +1,24 @@
+Network Monitor has been deployed!
+
+1. Get the application URL:
+{{- if eq .Values.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status with:
+    kubectl get svc -n {{ .Release.Namespace }} {{ include "network-monitor.fullname" . }} -w
+
+  Once available, get the external IP:
+    export SERVICE_IP=$(kubectl get svc -n {{ .Release.Namespace }} {{ include "network-monitor.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    echo "API URL: http://$SERVICE_IP:{{ .Values.service.port }}"
+{{- else if eq .Values.service.type "ClusterIP" }}
+  kubectl port-forward svc/{{ include "network-monitor.fullname" . }} -n {{ .Release.Namespace }} 8000:{{ .Values.service.port }}
+  echo "API URL: http://localhost:8000"
+{{- end }}
+
+2. Check health:
+    curl http://<SERVICE_IP>:{{ .Values.service.port }}/health
+
+3. View topology:
+    curl http://<SERVICE_IP>:{{ .Values.service.port }}/api/topology
+
+4. API Documentation:
+    http://<SERVICE_IP>:{{ .Values.service.port }}/docs
