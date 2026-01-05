@@ -1,0 +1,37 @@
+# Datacenter 1 - Traffic Generator Topology
+# Simple spine-leaf with iperf3 traffic generators
+
+name: dc1
+
+topology:
+  kinds:
+    srl:
+      image: ghcr.io/nokia/srlinux:24.3.2
+      type: ixrd2l
+
+  nodes:
+    spine1:
+      kind: srl
+
+    leaf1:
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
+
+    leaf2:
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
+
+    tgen1:
+      kind: linux
+      image: networkstatic/iperf3:latest
+
+    tgen2:
+      kind: linux
+      image: networkstatic/iperf3:latest
+
+  links:
+    - endpoints: ["spine1:e1-1", "leaf1:eth1"]
+    - endpoints: ["spine1:e1-2", "leaf2:eth1"]
+    - endpoints: ["leaf1:eth2", "leaf2:eth2"]
+    - endpoints: ["leaf1:eth3", "tgen1:eth1"]
+    - endpoints: ["leaf2:eth3", "tgen2:eth1"]

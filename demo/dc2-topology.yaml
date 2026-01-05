@@ -1,0 +1,386 @@
+---
+# DC2 - Dual Spine Datacenter Topology
+# 2 spines, 4 leaves, 4 traffic generators
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: customerb
+  labels:
+    app.kubernetes.io/name: clabernetes
+
+---
+# Spine1 SR Linux configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-spine1-config
+  namespace: customerb
+data:
+  startup-config.json: |
+    {
+      "interface": [
+        {
+          "name": "ethernet-1/1",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.1.1.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/2",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.1.2.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/3",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.1.3.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/4",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.1.4.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/10",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.0.0.1/30"}]}}]
+        }
+      ],
+      "network-instance": [
+        {
+          "name": "default",
+          "type": "default",
+          "admin-state": "enable",
+          "interface": [
+            {"name": "ethernet-1/1.0"},
+            {"name": "ethernet-1/2.0"},
+            {"name": "ethernet-1/3.0"},
+            {"name": "ethernet-1/4.0"},
+            {"name": "ethernet-1/10.0"}
+          ]
+        }
+      ]
+    }
+
+---
+# Spine2 SR Linux configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-spine2-config
+  namespace: customerb
+data:
+  startup-config.json: |
+    {
+      "interface": [
+        {
+          "name": "ethernet-1/1",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.2.1.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/2",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.2.2.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/3",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.2.3.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/4",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.2.4.1/30"}]}}]
+        },
+        {
+          "name": "ethernet-1/10",
+          "admin-state": "enable",
+          "subinterface": [{"index": 0, "admin-state": "enable", "ipv4": {"admin-state": "enable", "address": [{"ip-prefix": "10.0.0.2/30"}]}}]
+        }
+      ],
+      "network-instance": [
+        {
+          "name": "default",
+          "type": "default",
+          "admin-state": "enable",
+          "interface": [
+            {"name": "ethernet-1/1.0"},
+            {"name": "ethernet-1/2.0"},
+            {"name": "ethernet-1/3.0"},
+            {"name": "ethernet-1/4.0"},
+            {"name": "ethernet-1/10.0"}
+          ]
+        }
+      ]
+    }
+
+---
+# FRR daemons config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-frr-daemons
+  namespace: customerb
+data:
+  daemons: |
+    zebra=yes
+    bgpd=yes
+    ospfd=no
+    ospf6d=no
+    ripd=no
+    ripngd=no
+    isisd=no
+    pimd=no
+    ldpd=no
+    nhrpd=no
+    eigrpd=no
+    babeld=no
+    sharpd=no
+    staticd=yes
+    pbrd=no
+    bfdd=no
+    fabricd=no
+    vrrpd=no
+
+---
+# Leaf1 FRR config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-leaf1-config
+  namespace: customerb
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname dc2-leaf1
+    service integrated-vtysh-config
+    interface eth1
+     ip address 10.1.1.2/30
+     description to-spine1
+    interface eth2
+     ip address 10.2.1.2/30
+     description to-spine2
+    interface eth3
+     ip address 10.10.1.1/24
+     description to-tgen1
+    ip route 0.0.0.0/0 10.1.1.1
+
+---
+# Leaf2 FRR config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-leaf2-config
+  namespace: customerb
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname dc2-leaf2
+    service integrated-vtysh-config
+    interface eth1
+     ip address 10.1.2.2/30
+     description to-spine1
+    interface eth2
+     ip address 10.2.2.2/30
+     description to-spine2
+    interface eth3
+     ip address 10.10.2.1/24
+     description to-tgen2
+    ip route 0.0.0.0/0 10.1.2.1
+
+---
+# Leaf3 FRR config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-leaf3-config
+  namespace: customerb
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname dc2-leaf3
+    service integrated-vtysh-config
+    interface eth1
+     ip address 10.1.3.2/30
+     description to-spine1
+    interface eth2
+     ip address 10.2.3.2/30
+     description to-spine2
+    interface eth3
+     ip address 10.10.3.1/24
+     description to-tgen3
+    ip route 0.0.0.0/0 10.1.3.1
+
+---
+# Leaf4 FRR config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc2-leaf4-config
+  namespace: customerb
+data:
+  frr.conf: |
+    frr version 9.1
+    frr defaults traditional
+    hostname dc2-leaf4
+    service integrated-vtysh-config
+    interface eth1
+     ip address 10.1.4.2/30
+     description to-spine1
+    interface eth2
+     ip address 10.2.4.2/30
+     description to-spine2
+    interface eth3
+     ip address 10.10.4.1/24
+     description to-tgen4
+    ip route 0.0.0.0/0 10.1.4.1
+
+---
+# Clabernetes Topology
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Topology
+metadata:
+  name: dc2
+  namespace: customerb
+  labels:
+    app.kubernetes.io/name: dc2
+    app.kubernetes.io/part-of: network-monitor
+spec:
+  naming: prefixed
+  expose:
+    disableAutoExpose: false
+    exposeType: ClusterIP
+
+  definition:
+    containerlab: |
+      name: dc2
+
+      topology:
+        kinds:
+          srl:
+            image: ghcr.io/nokia/srlinux:24.3.2
+            type: ixrd2l
+
+        nodes:
+          # Dual spines
+          spine1:
+            kind: srl
+          spine2:
+            kind: srl
+
+          # Four leaves
+          leaf1:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+          leaf2:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+          leaf3:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+          leaf4:
+            kind: linux
+            image: quay.io/frrouting/frr:9.1.0
+            exec:
+              - /usr/lib/frr/frrinit.sh start
+
+          # Four traffic generators
+          tgen1:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.10.1.10/24 dev eth1 || true
+              - ip route add default via 10.10.1.1 || true
+          tgen2:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.10.2.10/24 dev eth1 || true
+              - ip route add default via 10.10.2.1 || true
+          tgen3:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.10.3.10/24 dev eth1 || true
+              - ip route add default via 10.10.3.1 || true
+          tgen4:
+            kind: linux
+            image: networkstatic/iperf3:latest
+            exec:
+              - ip addr add 10.10.4.10/24 dev eth1 || true
+              - ip route add default via 10.10.4.1 || true
+
+        links:
+          # Spine interconnect
+          - endpoints: ["spine1:e1-10", "spine2:e1-10"]
+
+          # Spine1 to leaves
+          - endpoints: ["spine1:e1-1", "leaf1:eth1"]
+          - endpoints: ["spine1:e1-2", "leaf2:eth1"]
+          - endpoints: ["spine1:e1-3", "leaf3:eth1"]
+          - endpoints: ["spine1:e1-4", "leaf4:eth1"]
+
+          # Spine2 to leaves
+          - endpoints: ["spine2:e1-1", "leaf1:eth2"]
+          - endpoints: ["spine2:e1-2", "leaf2:eth2"]
+          - endpoints: ["spine2:e1-3", "leaf3:eth2"]
+          - endpoints: ["spine2:e1-4", "leaf4:eth2"]
+
+          # Leaves to traffic generators
+          - endpoints: ["leaf1:eth3", "tgen1:eth1"]
+          - endpoints: ["leaf2:eth3", "tgen2:eth1"]
+          - endpoints: ["leaf3:eth3", "tgen3:eth1"]
+          - endpoints: ["leaf4:eth3", "tgen4:eth1"]
+
+  deployment:
+    resources:
+      default:
+        requests:
+          memory: 512Mi
+          cpu: 200m
+    filesFromConfigMap:
+      spine1:
+        - configMapName: dc2-spine1-config
+          configMapPath: startup-config.json
+          filePath: /tmp/startup-config.json
+      spine2:
+        - configMapName: dc2-spine2-config
+          configMapPath: startup-config.json
+          filePath: /tmp/startup-config.json
+      leaf1:
+        - configMapName: dc2-leaf1-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: dc2-frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons
+      leaf2:
+        - configMapName: dc2-leaf2-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: dc2-frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons
+      leaf3:
+        - configMapName: dc2-leaf3-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: dc2-frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons
+      leaf4:
+        - configMapName: dc2-leaf4-config
+          configMapPath: frr.conf
+          filePath: /etc/frr/frr.conf
+        - configMapName: dc2-frr-daemons
+          configMapPath: daemons
+          filePath: /etc/frr/daemons

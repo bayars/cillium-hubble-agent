@@ -280,6 +280,15 @@ spec:
           - endpoints: ["leaf2:eth3", "tgen2:eth1"]
 
   deployment:
+    resources:
+      default:
+        requests:
+          memory: 512Mi
+          cpu: 200m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+
     filesFromConfigMap:
       spine1:
         - configMapName: spine1-startup-config
