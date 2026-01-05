@@ -254,6 +254,10 @@ spec:
     disableAutoExpose: false
     exposeType: ClusterIP
 
+  imagePull:
+    insecureRegistries:
+      - harbor.harbor.svc.cluster.local
+
   definition:
     containerlab: |
       name: dc2
@@ -293,28 +297,28 @@ spec:
             exec:
               - /usr/lib/frr/frrinit.sh start
 
-          # Four traffic generators
+          # Four traffic generators (custom image with SSH)
           tgen1:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/library/iperf-ssh:latest
             exec:
               - ip addr add 10.10.1.10/24 dev eth1 || true
               - ip route add default via 10.10.1.1 || true
           tgen2:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/library/iperf-ssh:latest
             exec:
               - ip addr add 10.10.2.10/24 dev eth1 || true
               - ip route add default via 10.10.2.1 || true
           tgen3:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/library/iperf-ssh:latest
             exec:
               - ip addr add 10.10.3.10/24 dev eth1 || true
               - ip route add default via 10.10.3.1 || true
           tgen4:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/library/iperf-ssh:latest
             exec:
               - ip addr add 10.10.4.10/24 dev eth1 || true
               - ip route add default via 10.10.4.1 || true

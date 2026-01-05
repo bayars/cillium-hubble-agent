@@ -260,14 +260,14 @@ spec:
 
           tgen1:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/iperf-ssh:latest
             exec:
               - ip addr add 10.1.1.10/24 dev eth1 || true
               - ip route add 10.2.1.0/24 via 10.1.1.1 || true
 
           tgen2:
             kind: linux
-            image: networkstatic/iperf3:latest
+            image: harbor.harbor.svc.cluster.local/iperf-ssh:latest
             exec:
               - ip addr add 10.2.1.10/24 dev eth1 || true
               - ip route add 10.1.1.0/24 via 10.2.1.1 || true
