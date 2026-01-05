@@ -16,13 +16,16 @@ RUN curl -L --remote-name-all https://github.com/cilium/hubble/releases/download
     && mv hubble /usr/local/bin/ \
     && rm hubble-linux-amd64.tar.gz
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv for package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy application code
+# Copy project files
+COPY pyproject.toml .
 COPY agent/ ./agent/
 COPY api/ ./api/
+
+# Install dependencies with uv
+RUN uv sync --no-dev --frozen 2>/dev/null || uv sync --no-dev
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
@@ -38,4 +41,4 @@ ENV IDLE_TIMEOUT_SECONDS=5
 EXPOSE 8000
 
 # Default command - run API server
-CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

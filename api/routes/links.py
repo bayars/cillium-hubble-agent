@@ -36,7 +36,7 @@ async def get_links(
 
 
 @router.get(
-    "/{link_id}",
+    "/{link_id:path}",
     response_model=Link,
     summary="Get link by ID",
     description="Returns a specific link by its ID.",
@@ -53,7 +53,7 @@ async def get_link(link_id: str):
 
 
 @router.get(
-    "/{link_id}/metrics",
+    "/{link_id:path}/metrics",
     response_model=LinkMetrics,
     summary="Get link metrics",
     description="Returns traffic metrics for a specific link.",
@@ -70,7 +70,7 @@ async def get_link_metrics(link_id: str):
 
 
 @router.put(
-    "/{link_id}/state",
+    "/{link_id:path}/state",
     response_model=Optional[LinkStateEvent],
     summary="Update link state",
     description="Manually update the state of a link.",
@@ -91,7 +91,7 @@ async def update_link_state(
 
 
 @router.put(
-    "/{link_id}/metrics",
+    "/{link_id:path}/metrics",
     response_model=Link,
     summary="Update link metrics",
     description="Update traffic metrics for a link.",

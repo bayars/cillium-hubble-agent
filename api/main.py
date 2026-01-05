@@ -20,7 +20,7 @@ from .models.schemas import (
     HealthResponse, ErrorResponse, TopologyResponse,
     Node, Link, LinkState, NodeStatus,
 )
-from .routes import topology, links, websocket, events
+from .routes import topology, links, websocket, events, labs
 from .services.link_state_service import get_link_state_service
 from .services.event_bus import get_event_bus
 
@@ -120,6 +120,7 @@ app = FastAPI(
     ## Features
     - **Topology**: Get complete network graph for Cytoscape visualization
     - **Links**: Query and update link states and metrics
+    - **Labs**: Deploy and manage Clabernetes labs with auto-topology parsing
     - **Events**: Submit state change events from monitoring agents
     - **WebSocket**: Real-time event streaming for live updates
 
@@ -147,6 +148,7 @@ app.add_middleware(
 app.include_router(topology.router, prefix="/api")
 app.include_router(links.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
+app.include_router(labs.router, prefix="/api")
 app.include_router(websocket.router)
 
 
@@ -187,6 +189,7 @@ async def root():
             "topology": "/api/topology",
             "links": "/api/links",
             "events": "/api/events",
+            "labs": "/api/labs",
             "websocket": "/ws/events",
         },
     }

@@ -33,6 +33,7 @@ class LinkStateService:
         self._nodes: dict[str, Node] = {}
         self._links: dict[str, Link] = {}
         self._interface_to_link: dict[str, str] = {}  # interface -> link_id
+        self._labs: set[str] = {"default"}  # Known lab names
         self._lock = asyncio.Lock()
         self._started_at = datetime.now()
 
@@ -193,28 +194,6 @@ class LinkStateService:
                 link.metrics = metrics
                 link.last_updated = datetime.now()
 
-    async def add_node(self, node: Node):
-        """Add a node to the topology."""
-        async with self._lock:
-            self._nodes[node.id] = node
-
-        await get_event_bus().publish(
-            "node_added",
-            node.model_dump(mode='json'),
-        )
-
-    async def add_link(self, link: Link):
-        """Add a link to the topology."""
-        async with self._lock:
-            self._links[link.id] = link
-            self._interface_to_link[link.source_interface] = link.id
-            self._interface_to_link[link.target_interface] = link.id
-
-        await get_event_bus().publish(
-            "link_added",
-            link.model_dump(mode='json'),
-        )
-
     async def remove_node(self, node_id: str):
         """Remove a node from the topology."""
         async with self._lock:
@@ -250,8 +229,101 @@ class LinkStateService:
             "node_count": len(self._nodes),
             "link_count": len(self._links),
             "link_states": states,
+            "labs": list(self._labs),
             "uptime_seconds": (datetime.now() - self._started_at).total_seconds(),
         }
+
+    # =========================================================================
+    # Lab Management Methods
+    # =========================================================================
+
+    async def get_labs(self) -> list[str]:
+        """Get list of known lab names."""
+        async with self._lock:
+            return list(self._labs)
+
+    async def get_topology_by_lab(self, lab: str) -> dict:
+        """
+        Get topology filtered by lab.
+
+        Args:
+            lab: Lab name
+
+        Returns:
+            Dict with nodes and links for the lab
+        """
+        async with self._lock:
+            nodes = [n for n in self._nodes.values() if n.lab == lab]
+            links = [link for link in self._links.values() if link.lab == lab]
+
+            return {
+                "lab": lab,
+                "nodes": nodes,
+                "links": links,
+                "node_count": len(nodes),
+                "link_count": len(links),
+            }
+
+    async def clear_lab(self, lab: str):
+        """
+        Clear all nodes and links for a specific lab.
+
+        Args:
+            lab: Lab name
+        """
+        async with self._lock:
+            # Find and remove links for this lab
+            links_to_remove = [
+                lid for lid, link in self._links.items() if link.lab == lab
+            ]
+            for link_id in links_to_remove:
+                link = self._links.pop(link_id)
+                self._interface_to_link.pop(link.source_interface, None)
+                self._interface_to_link.pop(link.target_interface, None)
+
+            # Find and remove nodes for this lab
+            nodes_to_remove = [
+                nid for nid, node in self._nodes.items() if node.lab == lab
+            ]
+            for node_id in nodes_to_remove:
+                del self._nodes[node_id]
+
+            # Remove lab from tracking
+            self._labs.discard(lab)
+
+        # Publish event
+        await get_event_bus().publish(
+            "lab_cleared",
+            {"lab": lab, "nodes_removed": len(nodes_to_remove), "links_removed": len(links_to_remove)},
+        )
+
+        logger.info(
+            f"Cleared lab {lab}: {len(nodes_to_remove)} nodes, {len(links_to_remove)} links"
+        )
+
+    async def add_node(self, node: Node):
+        """Add a node to the topology."""
+        async with self._lock:
+            self._nodes[node.id] = node
+            self._labs.add(node.lab)
+
+        await get_event_bus().publish(
+            "node_added",
+            node.model_dump(mode='json'),
+        )
+
+    async def add_link(self, link: Link):
+        """Add a link to the topology."""
+        async with self._lock:
+            self._links[link.id] = link
+            self._interface_to_link[link.source_interface] = link.id
+            self._interface_to_link[link.target_interface] = link.id
+            self._labs.add(link.lab)
+
+        await get_event_bus().publish(
+            "link_added",
+            link.model_dump(mode='json'),
+        )
 
 
 # Global service instance
