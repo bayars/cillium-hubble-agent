@@ -1,0 +1,38 @@
+FROM alpine:3.19
+
+# Install openssh, iperf3, and useful network tools
+RUN apk add --no-cache \
+    openssh \
+    openssh-server \
+    iperf3 \
+    iproute2 \
+    iputils \
+    bind-tools \
+    tcpdump \
+    curl \
+    bash \
+    net-tools \
+    mtr \
+    iftop \
+    nmap \
+    busybox-extras
+
+# Configure SSH
+RUN mkdir -p /var/run/sshd \
+    && ssh-keygen -A \
+    && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && echo 'root:iperf123' | chpasswd
+
+# Create non-root user as well
+RUN adduser -D -s /bin/bash iperf \
+    && echo 'iperf:iperf123' | chpasswd
+
+# Expose SSH and iperf3 ports
+EXPOSE 22 5201
+
+# Start SSH daemon and keep container running
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
