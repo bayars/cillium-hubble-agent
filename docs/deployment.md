@@ -50,7 +50,17 @@ helm install network-monitor helm/network-monitor \
   --set config.hubbleRelayAddr=hubble-relay.kube-system.svc.cluster.local:4245
 ```
 
-Expose via GKE Ingress:
+Expose via LoadBalancer with static IP:
+
+```bash
+helm upgrade network-monitor helm/network-monitor \
+  --namespace network-monitor \
+  --set service.type=LoadBalancer \
+  --set service.annotations."cloud\.google\.com/load-balancer-type"=Internal \
+  --set service.annotations."networking\.gke\.io/load-balancer-ip-address"=my-reserved-ip
+```
+
+Or via GKE Ingress:
 
 ```bash
 helm upgrade network-monitor helm/network-monitor \
@@ -86,7 +96,18 @@ helm install network-monitor helm/network-monitor \
   --create-namespace
 ```
 
-Expose via AWS ALB:
+Expose via NLB with Elastic IP:
+
+```bash
+helm upgrade network-monitor helm/network-monitor \
+  --namespace network-monitor \
+  --set service.type=LoadBalancer \
+  --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"=nlb \
+  --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"=internet-facing \
+  --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-eip-allocations"=eipalloc-xxx
+```
+
+Or via ALB Ingress:
 
 ```bash
 helm upgrade network-monitor helm/network-monitor \
@@ -131,7 +152,9 @@ Expose via LoadBalancer:
 ```bash
 helm upgrade network-monitor helm/network-monitor \
   --namespace network-monitor \
-  --set service.type=LoadBalancer
+  --set service.type=LoadBalancer \
+  --set service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true \
+  --set service.annotations."service\.beta\.kubernetes\.io/azure-pip-name"=my-pip
 ```
 
 ---
