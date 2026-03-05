@@ -16,8 +16,8 @@ from enum import Enum
 from typing import AsyncIterator, Callable, Optional
 
 try:
-    import grpc
     from grpc import aio as grpc_aio
+
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class FlowVerdict(str, Enum):
     """Hubble flow verdict types."""
+
     FORWARDED = "FORWARDED"
     DROPPED = "DROPPED"
     ERROR = "ERROR"
@@ -39,6 +40,7 @@ class FlowVerdict(str, Enum):
 
 class TrafficDirection(str, Enum):
     """Traffic direction."""
+
     INGRESS = "INGRESS"
     EGRESS = "EGRESS"
     UNKNOWN = "UNKNOWN"
@@ -47,6 +49,7 @@ class TrafficDirection(str, Enum):
 @dataclass
 class Endpoint:
     """Represents a network endpoint (pod/service)."""
+
     namespace: str = ""
     pod_name: str = ""
     labels: dict = field(default_factory=dict)
@@ -73,6 +76,7 @@ class Endpoint:
 @dataclass
 class FlowEvent:
     """Represents a network flow event from Hubble."""
+
     source: Endpoint
     destination: Endpoint
     verdict: FlowVerdict
@@ -109,6 +113,7 @@ class FlowEvent:
 
 class LinkState(str, Enum):
     """Link state derived from flow analysis."""
+
     ACTIVE = "active"
     IDLE = "idle"
     DOWN = "down"
@@ -118,6 +123,7 @@ class LinkState(str, Enum):
 @dataclass
 class LinkStateChange:
     """Represents a link state change event."""
+
     flow_key: str
     source: Endpoint
     destination: Endpoint
@@ -171,7 +177,9 @@ class HubbleMonitor:
             callback: Optional callback for state changes
         """
         if not GRPC_AVAILABLE:
-            raise RuntimeError("grpcio is required for Hubble monitoring. Install with: pip install grpcio")
+            raise RuntimeError(
+                "grpcio is required for Hubble monitoring. Install with: pip install grpcio"
+            )
 
         self.relay_addr = relay_addr
         self.idle_timeout = timedelta(seconds=idle_timeout_seconds)
@@ -183,7 +191,9 @@ class HubbleMonitor:
         # Flow tracking
         self._flow_last_seen: dict[str, datetime] = {}  # flow_key -> last_seen
         self._flow_states: dict[str, LinkState] = {}  # flow_key -> current_state
-        self._flow_endpoints: dict[str, tuple[Endpoint, Endpoint]] = {}  # flow_key -> (src, dst)
+        self._flow_endpoints: dict[
+            str, tuple[Endpoint, Endpoint]
+        ] = {}  # flow_key -> (src, dst)
         self._event_queue: asyncio.Queue[LinkStateChange] = asyncio.Queue()
 
         # Idle detection task
@@ -197,13 +207,12 @@ class HubbleMonitor:
 
         # Wait for channel to be ready
         try:
-            await asyncio.wait_for(
-                self._channel.channel_ready(),
-                timeout=10.0
-            )
+            await asyncio.wait_for(self._channel.channel_ready(), timeout=10.0)
             logger.info("Connected to Hubble Relay")
         except asyncio.TimeoutError:
-            raise ConnectionError(f"Timeout connecting to Hubble Relay at {self.relay_addr}")
+            raise ConnectionError(
+                f"Timeout connecting to Hubble Relay at {self.relay_addr}"
+            )
 
     async def disconnect(self):
         """Disconnect from Hubble Relay."""
@@ -311,7 +320,9 @@ class HubbleMonitor:
                         if old_state == LinkState.ACTIVE:
                             self._flow_states[flow_key] = LinkState.IDLE
 
-                            src, dst = self._flow_endpoints.get(flow_key, (Endpoint(), Endpoint()))
+                            src, dst = self._flow_endpoints.get(
+                                flow_key, (Endpoint(), Endpoint())
+                            )
                             change = LinkStateChange(
                                 flow_key=flow_key,
                                 source=src,
@@ -365,13 +376,15 @@ class HubbleMonitor:
         Uses `hubble observe --output json` as a fallback when
         gRPC stubs are not available.
         """
-        import subprocess
         import json
 
         cmd = [
-            "hubble", "observe",
-            "--server", self.relay_addr,
-            "--output", "json",
+            "hubble",
+            "observe",
+            "--server",
+            self.relay_addr,
+            "--output",
+            "json",
             "--follow",
         ]
 
@@ -436,10 +449,7 @@ class HubbleMonitor:
         """Async iterator for link state change events."""
         while self._running:
             try:
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0
-                )
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 yield event
             except asyncio.TimeoutError:
                 continue
@@ -482,8 +492,11 @@ class HubbleMonitor:
 # Standalone usage example
 async def main():
     """Example usage of HubbleMonitor."""
+
     def on_change(event: LinkStateChange):
-        print(f"[{event.timestamp}] {event.flow_key}: {event.old_state.value} -> {event.new_state.value}")
+        print(
+            f"[{event.timestamp}] {event.flow_key}: {event.old_state.value} -> {event.new_state.value}"
+        )
 
     monitor = HubbleMonitor(
         relay_addr="hubble-relay.kube-system.svc:4245",

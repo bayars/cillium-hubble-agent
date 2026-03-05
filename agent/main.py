@@ -20,14 +20,12 @@ Usage:
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import signal
-import sys
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 
 from .interface_manager import InterfaceManager, StateChangeEvent
 from .event_publisher import (
@@ -35,7 +33,6 @@ from .event_publisher import (
     HttpPublisher,
     WebSocketPublisher,
     InMemoryPublisher,
-    create_publisher,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 class DiscoveryMode(str, Enum):
     """Discovery mode for interface/endpoint detection."""
-    SYSFS = "sysfs"    # Netlink + sysfs (standalone)
+
+    SYSFS = "sysfs"  # Netlink + sysfs (standalone)
     HUBBLE = "hubble"  # Cilium Hubble (Kubernetes)
 
 
@@ -130,18 +128,24 @@ class NetworkMonitorAgent:
         logger.info(f"Endpoint {event.type.value}: {event.endpoint.id}")
 
         if self._publisher:
-            asyncio.create_task(self._publisher.publish({
-                "type": f"endpoint_{event.type.value.lower()}",
-                "endpoint": event.endpoint.to_dict(),
-                "timestamp": event.timestamp.isoformat(),
-            }))
+            asyncio.create_task(
+                self._publisher.publish(
+                    {
+                        "type": f"endpoint_{event.type.value.lower()}",
+                        "endpoint": event.endpoint.to_dict(),
+                        "timestamp": event.timestamp.isoformat(),
+                    }
+                )
+            )
 
     async def start(self):
         """Start the agent."""
         if self._running:
             return
 
-        logger.info(f"Starting Network Monitor Agent (mode: {self.discovery_mode.value})...")
+        logger.info(
+            f"Starting Network Monitor Agent (mode: {self.discovery_mode.value})..."
+        )
 
         # Create publisher
         if self.ws_url:
@@ -249,7 +253,9 @@ class NetworkMonitorAgent:
         """Get agent status."""
         status = {
             "running": self._running,
-            "publisher_connected": self._publisher.is_connected if self._publisher else False,
+            "publisher_connected": self._publisher.is_connected
+            if self._publisher
+            else False,
             "interfaces": {},
             "timestamp": datetime.now().isoformat(),
         }

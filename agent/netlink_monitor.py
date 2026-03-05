@@ -16,7 +16,6 @@ from typing import AsyncIterator, Callable, Optional
 
 try:
     from pyroute2 import IPRoute
-    from pyroute2.netlink.rtnl import RTM_NEWLINK, RTM_DELLINK
     PYROUTE2_AVAILABLE = True
 except ImportError:
     PYROUTE2_AVAILABLE = False
@@ -34,6 +33,7 @@ class LinkEvent(str, Enum):
 @dataclass
 class LinkStateChange:
     """Represents a link state change event."""
+
     interface: str
     ifindex: int
     event: LinkEvent
@@ -86,7 +86,9 @@ class NetlinkMonitor:
                              If None, monitors all interfaces except lo.
         """
         if not PYROUTE2_AVAILABLE:
-            raise RuntimeError("pyroute2 is required for Netlink monitoring. Install with: pip install pyroute2")
+            raise RuntimeError(
+                "pyroute2 is required for Netlink monitoring. Install with: pip install pyroute2"
+            )
 
         self.callback = callback
         self.interface_filter = interface_filter
@@ -155,8 +157,7 @@ class NetlinkMonitor:
             try:
                 # Use executor to avoid blocking
                 msgs = await loop.run_in_executor(
-                    None,
-                    lambda: self._ipr.get() if self._ipr else []
+                    None, lambda: self._ipr.get() if self._ipr else []
                 )
 
                 for msg in msgs:
@@ -226,10 +227,7 @@ class NetlinkMonitor:
         """Async iterator for link state change events."""
         while self._running:
             try:
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0
-                )
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 yield event
             except asyncio.TimeoutError:
                 continue
@@ -242,8 +240,11 @@ class NetlinkMonitor:
 # Standalone usage example
 async def main():
     """Example usage of NetlinkMonitor."""
+
     def on_change(event: LinkStateChange):
-        print(f"[{event.timestamp}] {event.interface}: {event.event.value} (operstate: {event.operstate})")
+        print(
+            f"[{event.timestamp}] {event.interface}: {event.event.value} (operstate: {event.operstate})"
+        )
 
     monitor = NetlinkMonitor(callback=on_change)
 

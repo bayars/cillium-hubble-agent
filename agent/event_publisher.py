@@ -8,12 +8,11 @@ Supports multiple publishing targets:
 """
 
 import asyncio
-import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PublishResult:
     """Result of a publish operation."""
+
     success: bool
     target: str
     message: Optional[str] = None
@@ -109,7 +109,7 @@ class HttpPublisher(Publisher):
                 async with self._session.post(
                     self.api_url,
                     json=event,
-                    headers={"Content-Type": "application/json"}
+                    headers={"Content-Type": "application/json"},
                 ) as response:
                     if response.status < 300:
                         return PublishResult(
@@ -125,9 +125,13 @@ class HttpPublisher(Publisher):
                         )
 
             except asyncio.TimeoutError:
-                logger.warning(f"HTTP publish timeout (attempt {attempt + 1}/{self.retry_count})")
+                logger.warning(
+                    f"HTTP publish timeout (attempt {attempt + 1}/{self.retry_count})"
+                )
             except aiohttp.ClientError as e:
-                logger.warning(f"HTTP publish error (attempt {attempt + 1}/{self.retry_count}): {e}")
+                logger.warning(
+                    f"HTTP publish error (attempt {attempt + 1}/{self.retry_count}): {e}"
+                )
 
             if attempt < self.retry_count - 1:
                 await asyncio.sleep(self.retry_delay)
@@ -140,7 +144,9 @@ class HttpPublisher(Publisher):
 
     @property
     def is_connected(self) -> bool:
-        return self._connected and self._session is not None and not self._session.closed
+        return (
+            self._connected and self._session is not None and not self._session.closed
+        )
 
 
 class WebSocketPublisher(Publisher):
@@ -301,13 +307,11 @@ class MultiPublisher(Publisher):
     async def publish(self, event: dict) -> PublishResult:
         """Publish to all targets."""
         results = await asyncio.gather(
-            *[pub.publish(event) for pub in self.publishers],
-            return_exceptions=True
+            *[pub.publish(event) for pub in self.publishers], return_exceptions=True
         )
 
         success_count = sum(
-            1 for r in results
-            if isinstance(r, PublishResult) and r.success
+            1 for r in results if isinstance(r, PublishResult) and r.success
         )
 
         return PublishResult(
@@ -386,7 +390,9 @@ class EventPublisher:
             self._buffer_event(event)
             if len(self._buffer) >= self.batch_size:
                 await self._flush_buffer()
-            return PublishResult(success=True, target="buffered", message="Queued for batch")
+            return PublishResult(
+                success=True, target="buffered", message="Queued for batch"
+            )
 
     def _buffer_event(self, event: dict):
         """Add event to buffer."""
@@ -418,10 +424,7 @@ class EventPublisher:
 
 
 # Factory function
-def create_publisher(
-    publisher_type: str = "memory",
-    **kwargs
-) -> Publisher:
+def create_publisher(publisher_type: str = "memory", **kwargs) -> Publisher:
     """
     Create a publisher instance.
 

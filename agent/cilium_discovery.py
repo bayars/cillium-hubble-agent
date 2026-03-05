@@ -17,6 +17,7 @@ from typing import AsyncIterator, Callable, Optional
 try:
     from kubernetes_asyncio import client, config, watch
     from kubernetes_asyncio.client import ApiException
+
     K8S_AVAILABLE = True
 except ImportError:
     K8S_AVAILABLE = False
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class EndpointEventType(str, Enum):
     """Type of endpoint event."""
+
     ADDED = "ADDED"
     MODIFIED = "MODIFIED"
     DELETED = "DELETED"
@@ -33,6 +35,7 @@ class EndpointEventType(str, Enum):
 
 class EndpointState(str, Enum):
     """Endpoint state."""
+
     READY = "ready"
     NOT_READY = "not_ready"
     UNKNOWN = "unknown"
@@ -41,6 +44,7 @@ class EndpointState(str, Enum):
 @dataclass
 class CiliumEndpointInfo:
     """Information about a Cilium endpoint."""
+
     name: str
     namespace: str
     identity: int = 0
@@ -79,6 +83,7 @@ class CiliumEndpointInfo:
 @dataclass
 class EndpointEvent:
     """Event for endpoint changes."""
+
     type: EndpointEventType
     endpoint: CiliumEndpointInfo
     timestamp: datetime = field(default_factory=datetime.now)
@@ -311,10 +316,7 @@ class CiliumEndpointDiscovery:
         """Async iterator for endpoint events."""
         while self._running:
             try:
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0
-                )
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 yield event
             except asyncio.TimeoutError:
                 continue
@@ -329,17 +331,11 @@ class CiliumEndpointDiscovery:
 
     def get_endpoints_by_node(self, node_name: str) -> list[CiliumEndpointInfo]:
         """Get endpoints on a specific node."""
-        return [
-            ep for ep in self._endpoints.values()
-            if ep.node_name == node_name
-        ]
+        return [ep for ep in self._endpoints.values() if ep.node_name == node_name]
 
     def get_endpoints_by_namespace(self, namespace: str) -> list[CiliumEndpointInfo]:
         """Get endpoints in a specific namespace."""
-        return [
-            ep for ep in self._endpoints.values()
-            if ep.namespace == namespace
-        ]
+        return [ep for ep in self._endpoints.values() if ep.namespace == namespace]
 
     @property
     def is_running(self) -> bool:
@@ -353,9 +349,12 @@ class CiliumEndpointDiscovery:
 # Standalone usage example
 async def main():
     """Example usage of CiliumEndpointDiscovery."""
+
     def on_event(event: EndpointEvent):
-        print(f"[{event.type.value}] {event.endpoint.id} - "
-              f"IP: {event.endpoint.ipv4_address}, Node: {event.endpoint.node_name}")
+        print(
+            f"[{event.type.value}] {event.endpoint.id} - "
+            f"IP: {event.endpoint.ipv4_address}, Node: {event.endpoint.node_name}"
+        )
 
     discovery = CiliumEndpointDiscovery(callback=on_event)
 

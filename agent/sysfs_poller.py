@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 
 class TrafficState(str, Enum):
     ACTIVE = "active"  # Traffic flowing
-    IDLE = "idle"      # No traffic
+    IDLE = "idle"  # No traffic
     UNKNOWN = "unknown"
 
 
 @dataclass
 class InterfaceStats:
     """Raw statistics from sysfs."""
+
     rx_bytes: int = 0
     tx_bytes: int = 0
     rx_packets: int = 0
@@ -41,6 +42,7 @@ class InterfaceStats:
 @dataclass
 class TrafficMetrics:
     """Computed traffic metrics."""
+
     interface: str
     rx_bps: float = 0.0  # Bytes per second
     tx_bps: float = 0.0
@@ -70,6 +72,7 @@ class TrafficMetrics:
 @dataclass
 class TrafficStateChange:
     """Represents a traffic state change event."""
+
     interface: str
     old_state: TrafficState
     new_state: TrafficState
@@ -181,10 +184,7 @@ class SysfsPoller:
             return 0
 
     def _compute_metrics(
-        self,
-        ifname: str,
-        prev: InterfaceStats,
-        curr: InterfaceStats
+        self, ifname: str, prev: InterfaceStats, curr: InterfaceStats
     ) -> TrafficMetrics:
         """Compute traffic metrics from two stat samples."""
         time_delta = (curr.timestamp - prev.timestamp).total_seconds()
@@ -211,8 +211,10 @@ class SysfsPoller:
             utilization = min(max_rate / speed_bps, 1.0)
 
         # Determine traffic state
-        has_traffic = (rx_bytes_delta > self.ACTIVE_THRESHOLD_BYTES or
-                      tx_bytes_delta > self.ACTIVE_THRESHOLD_BYTES)
+        has_traffic = (
+            rx_bytes_delta > self.ACTIVE_THRESHOLD_BYTES
+            or tx_bytes_delta > self.ACTIVE_THRESHOLD_BYTES
+        )
 
         if has_traffic:
             state = TrafficState.ACTIVE
@@ -265,7 +267,9 @@ class SysfsPoller:
                     await self._event_queue.put(change)
                     if self.callback:
                         self.callback(change)
-                    logger.info(f"Traffic state change: {ifname} {old_state.value} -> {new_state.value}")
+                    logger.info(
+                        f"Traffic state change: {ifname} {old_state.value} -> {new_state.value}"
+                    )
 
             self._previous_stats[ifname] = curr_stats
 
@@ -284,7 +288,9 @@ class SysfsPoller:
         if self._running:
             return
 
-        logger.info(f"Starting sysfs poller (interval: {self.poll_interval * 1000}ms)...")
+        logger.info(
+            f"Starting sysfs poller (interval: {self.poll_interval * 1000}ms)..."
+        )
 
         # Initialize with current stats
         interfaces = self._get_interfaces()
@@ -310,10 +316,7 @@ class SysfsPoller:
         """Async iterator for traffic state change events."""
         while self._running:
             try:
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0
-                )
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 yield event
             except asyncio.TimeoutError:
                 continue
@@ -338,9 +341,12 @@ class SysfsPoller:
 # Standalone usage example
 async def main():
     """Example usage of SysfsPoller."""
+
     def on_change(event: TrafficStateChange):
         print(f"State change: {event.interface} -> {event.new_state.value}")
-        print(f"  RX: {event.metrics.rx_bps:.2f} B/s, TX: {event.metrics.tx_bps:.2f} B/s")
+        print(
+            f"  RX: {event.metrics.rx_bps:.2f} B/s, TX: {event.metrics.tx_bps:.2f} B/s"
+        )
 
     poller = SysfsPoller(
         poll_interval_ms=100,
@@ -357,7 +363,9 @@ async def main():
             await asyncio.sleep(1)
             metrics = poller.get_all_metrics()
             for ifname, m in metrics.items():
-                print(f"{ifname}: state={m.state.value}, rx={m.rx_bps:.0f} B/s, tx={m.tx_bps:.0f} B/s")
+                print(
+                    f"{ifname}: state={m.state.value}, rx={m.rx_bps:.0f} B/s, tx={m.tx_bps:.0f} B/s"
+                )
 
     except KeyboardInterrupt:
         pass

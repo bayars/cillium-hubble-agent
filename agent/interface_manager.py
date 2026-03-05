@@ -15,23 +15,25 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
 
-from .netlink_monitor import NetlinkMonitor, LinkStateChange, LinkEvent
-from .sysfs_poller import SysfsPoller, TrafficStateChange, TrafficState, TrafficMetrics
+from .netlink_monitor import NetlinkMonitor, LinkStateChange
+from .sysfs_poller import SysfsPoller, TrafficStateChange, TrafficState
 
 logger = logging.getLogger(__name__)
 
 
 class LinkState(str, Enum):
     """Combined link state."""
-    UP_ACTIVE = "active"    # Link up, traffic flowing
-    UP_IDLE = "idle"        # Link up, no traffic
-    DOWN = "down"           # Link down
-    UNKNOWN = "unknown"     # State not yet determined
+
+    UP_ACTIVE = "active"  # Link up, traffic flowing
+    UP_IDLE = "idle"  # Link up, no traffic
+    DOWN = "down"  # Link down
+    UNKNOWN = "unknown"  # State not yet determined
 
 
 @dataclass
 class InterfaceInfo:
     """Complete information about a network interface."""
+
     name: str
     ifindex: int = 0
     mac_address: str = ""
@@ -67,6 +69,7 @@ class InterfaceInfo:
 @dataclass
 class StateChangeEvent:
     """Unified state change event."""
+
     interface: str
     old_state: LinkState
     new_state: LinkState
@@ -124,7 +127,9 @@ class InterfaceManager:
         self._event_queue: asyncio.Queue[StateChangeEvent] = asyncio.Queue()
 
         # Initialize monitors with our filter
-        monitored = self._discover_interfaces() if not interface_filter else interface_filter
+        monitored = (
+            self._discover_interfaces() if not interface_filter else interface_filter
+        )
 
         self._netlink_monitor = NetlinkMonitor(
             callback=self._on_link_change,
@@ -205,7 +210,9 @@ class InterfaceManager:
 
         return info
 
-    def _compute_link_state(self, operstate: str, traffic_state: TrafficState) -> LinkState:
+    def _compute_link_state(
+        self, operstate: str, traffic_state: TrafficState
+    ) -> LinkState:
         """Compute combined link state from operstate and traffic state."""
         if operstate != "up":
             return LinkState.DOWN
@@ -287,7 +294,9 @@ class InterfaceManager:
         await self._event_queue.put(event)
         if self.state_change_callback:
             self.state_change_callback(event)
-        logger.info(f"State change: {event.interface} {event.old_state.value} -> {event.new_state.value}")
+        logger.info(
+            f"State change: {event.interface} {event.old_state.value} -> {event.new_state.value}"
+        )
 
     async def start(self):
         """Start monitoring all interfaces."""
@@ -301,7 +310,9 @@ class InterfaceManager:
         for ifname in interfaces:
             self._interfaces[ifname] = self._read_interface_info(ifname)
 
-        logger.info(f"Managing {len(self._interfaces)} interfaces: {list(self._interfaces.keys())}")
+        logger.info(
+            f"Managing {len(self._interfaces)} interfaces: {list(self._interfaces.keys())}"
+        )
 
         # Start monitors
         await self._netlink_monitor.start()
@@ -324,10 +335,7 @@ class InterfaceManager:
         """Async iterator for state change events."""
         while self._running:
             try:
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0
-                )
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
                 yield event
             except asyncio.TimeoutError:
                 continue
@@ -367,8 +375,11 @@ class InterfaceManager:
 # Standalone usage example
 async def main():
     """Example usage of InterfaceManager."""
+
     def on_change(event: StateChangeEvent):
-        print(f"\n[STATE CHANGE] {event.interface}: {event.old_state.value} -> {event.new_state.value}")
+        print(
+            f"\n[STATE CHANGE] {event.interface}: {event.old_state.value} -> {event.new_state.value}"
+        )
         info = event.interface_info
         print(f"  RX: {info.rx_bps:.0f} B/s, TX: {info.tx_bps:.0f} B/s")
 
@@ -386,9 +397,11 @@ async def main():
             await asyncio.sleep(2)
             print("\n--- Current Interface States ---")
             for ifname, info in manager.get_all_interfaces().items():
-                print(f"{ifname}: state={info.link_state.value}, "
-                      f"rx={info.rx_bps:.0f} B/s, tx={info.tx_bps:.0f} B/s, "
-                      f"util={info.utilization*100:.1f}%")
+                print(
+                    f"{ifname}: state={info.link_state.value}, "
+                    f"rx={info.rx_bps:.0f} B/s, tx={info.tx_bps:.0f} B/s, "
+                    f"util={info.utilization * 100:.1f}%"
+                )
 
     except KeyboardInterrupt:
         pass
