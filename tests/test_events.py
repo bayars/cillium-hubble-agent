@@ -6,20 +6,33 @@ from httpx import AsyncClient
 async def test_post_event(client: AsyncClient):
     """Test posting an event."""
     # Add topology first
-    await client.post("/api/topology/nodes", json={
-        "id": "r1", "label": "R1", "type": "router",
-    })
-    await client.post("/api/topology/nodes", json={
-        "id": "r2", "label": "R2", "type": "router",
-    })
-    await client.post("/api/topology/links", json={
-        "id": "link1",
-        "source": "r1",
-        "target": "r2",
-        "source_interface": "eth0",
-        "target_interface": "eth0",
-        "state": "idle",
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r2",
+            "label": "R2",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/links",
+        json={
+            "id": "link1",
+            "source": "r1",
+            "target": "r2",
+            "source_interface": "eth0",
+            "target_interface": "eth0",
+            "state": "idle",
+        },
+    )
 
     event = {
         "interface": "eth0",

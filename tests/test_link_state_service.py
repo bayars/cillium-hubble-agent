@@ -13,9 +13,14 @@ async def test_initialize_topology():
         Node(id="r2", label="R2", type="router", status=NodeStatus.UP),
     ]
     links = [
-        Link(id="l1", source="r1", target="r2",
-             source_interface="eth0", target_interface="eth0",
-             state=LinkState.ACTIVE),
+        Link(
+            id="l1",
+            source="r1",
+            target="r2",
+            source_interface="eth0",
+            target_interface="eth0",
+            state=LinkState.ACTIVE,
+        ),
     ]
     await service.initialize_topology(nodes, links)
 
@@ -33,9 +38,14 @@ async def test_update_link_state():
         Node(id="r2", label="R2", type="router"),
     ]
     links = [
-        Link(id="l1", source="r1", target="r2",
-             source_interface="eth0", target_interface="eth0",
-             state=LinkState.ACTIVE),
+        Link(
+            id="l1",
+            source="r1",
+            target="r2",
+            source_interface="eth0",
+            target_interface="eth0",
+            state=LinkState.ACTIVE,
+        ),
     ]
     await service.initialize_topology(nodes, links)
 
@@ -51,9 +61,14 @@ async def test_no_event_on_same_state():
     service = get_link_state_service()
     nodes = [Node(id="r1", label="R1", type="router")]
     links = [
-        Link(id="l1", source="r1", target="r1",
-             source_interface="eth0", target_interface="eth1",
-             state=LinkState.ACTIVE),
+        Link(
+            id="l1",
+            source="r1",
+            target="r1",
+            source_interface="eth0",
+            target_interface="eth1",
+            state=LinkState.ACTIVE,
+        ),
     ]
     await service.initialize_topology(nodes, links)
 
@@ -67,8 +82,13 @@ async def test_update_link_metrics():
     service = get_link_state_service()
     nodes = [Node(id="r1", label="R1", type="router")]
     links = [
-        Link(id="l1", source="r1", target="r1",
-             source_interface="eth0", target_interface="eth1"),
+        Link(
+            id="l1",
+            source="r1",
+            target="r1",
+            source_interface="eth0",
+            target_interface="eth1",
+        ),
     ]
     await service.initialize_topology(nodes, links)
 
@@ -86,8 +106,13 @@ async def test_get_link_by_interface():
     service = get_link_state_service()
     nodes = [Node(id="r1", label="R1", type="router")]
     links = [
-        Link(id="l1", source="r1", target="r1",
-             source_interface="eth0", target_interface="eth1"),
+        Link(
+            id="l1",
+            source="r1",
+            target="r1",
+            source_interface="eth0",
+            target_interface="eth1",
+        ),
     ]
     await service.initialize_topology(nodes, links)
 
@@ -111,14 +136,26 @@ async def test_lab_isolation():
     # Add nodes/links for two labs
     await service.add_node(Node(id="dc1/r1", label="R1", type="router", lab="dc1"))
     await service.add_node(Node(id="dc2/r1", label="R1", type="router", lab="dc2"))
-    await service.add_link(Link(
-        id="dc1/l1", source="dc1/r1", target="dc1/r1",
-        source_interface="dc1-eth0", target_interface="dc1-eth1", lab="dc1",
-    ))
-    await service.add_link(Link(
-        id="dc2/l1", source="dc2/r1", target="dc2/r1",
-        source_interface="dc2-eth0", target_interface="dc2-eth1", lab="dc2",
-    ))
+    await service.add_link(
+        Link(
+            id="dc1/l1",
+            source="dc1/r1",
+            target="dc1/r1",
+            source_interface="dc1-eth0",
+            target_interface="dc1-eth1",
+            lab="dc1",
+        )
+    )
+    await service.add_link(
+        Link(
+            id="dc2/l1",
+            source="dc2/r1",
+            target="dc2/r1",
+            source_interface="dc2-eth0",
+            target_interface="dc2-eth1",
+            lab="dc2",
+        )
+    )
 
     dc1 = await service.get_topology_by_lab("dc1")
     dc2 = await service.get_topology_by_lab("dc2")
@@ -136,14 +173,26 @@ async def test_clear_lab():
 
     await service.add_node(Node(id="dc1/r1", label="R1", type="router", lab="dc1"))
     await service.add_node(Node(id="dc2/r1", label="R1", type="router", lab="dc2"))
-    await service.add_link(Link(
-        id="dc1/l1", source="dc1/r1", target="dc1/r1",
-        source_interface="dc1-eth0", target_interface="dc1-eth1", lab="dc1",
-    ))
-    await service.add_link(Link(
-        id="dc2/l1", source="dc2/r1", target="dc2/r1",
-        source_interface="dc2-eth0", target_interface="dc2-eth1", lab="dc2",
-    ))
+    await service.add_link(
+        Link(
+            id="dc1/l1",
+            source="dc1/r1",
+            target="dc1/r1",
+            source_interface="dc1-eth0",
+            target_interface="dc1-eth1",
+            lab="dc1",
+        )
+    )
+    await service.add_link(
+        Link(
+            id="dc2/l1",
+            source="dc2/r1",
+            target="dc2/r1",
+            source_interface="dc2-eth0",
+            target_interface="dc2-eth1",
+            lab="dc2",
+        )
+    )
 
     await service.clear_lab("dc1")
 
@@ -162,12 +211,22 @@ async def test_get_stats():
     service = get_link_state_service()
     nodes = [Node(id="r1", label="R1", type="router")]
     links = [
-        Link(id="l1", source="r1", target="r1",
-             source_interface="eth0", target_interface="eth1",
-             state=LinkState.ACTIVE),
-        Link(id="l2", source="r1", target="r1",
-             source_interface="eth2", target_interface="eth3",
-             state=LinkState.DOWN),
+        Link(
+            id="l1",
+            source="r1",
+            target="r1",
+            source_interface="eth0",
+            target_interface="eth1",
+            state=LinkState.ACTIVE,
+        ),
+        Link(
+            id="l2",
+            source="r1",
+            target="r1",
+            source_interface="eth2",
+            target_interface="eth3",
+            state=LinkState.DOWN,
+        ),
     ]
     await service.initialize_topology(nodes, links)
 

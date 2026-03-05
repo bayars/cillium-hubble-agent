@@ -4,30 +4,46 @@ from httpx import AsyncClient
 
 async def _seed_topology(client: AsyncClient):
     """Helper to create a basic topology."""
-    await client.post("/api/topology/nodes", json={
-        "id": "r1", "label": "R1", "type": "router",
-    })
-    await client.post("/api/topology/nodes", json={
-        "id": "r2", "label": "R2", "type": "router",
-    })
-    await client.post("/api/topology/links", json={
-        "id": "link1",
-        "source": "r1",
-        "target": "r2",
-        "source_interface": "eth0",
-        "target_interface": "eth0",
-        "state": "active",
-        "speed_mbps": 1000,
-    })
-    await client.post("/api/topology/links", json={
-        "id": "link2",
-        "source": "r1",
-        "target": "r2",
-        "source_interface": "eth1",
-        "target_interface": "eth1",
-        "state": "idle",
-        "speed_mbps": 10000,
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r2",
+            "label": "R2",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/links",
+        json={
+            "id": "link1",
+            "source": "r1",
+            "target": "r2",
+            "source_interface": "eth0",
+            "target_interface": "eth0",
+            "state": "active",
+            "speed_mbps": 1000,
+        },
+    )
+    await client.post(
+        "/api/topology/links",
+        json={
+            "id": "link2",
+            "source": "r1",
+            "target": "r2",
+            "source_interface": "eth1",
+            "target_interface": "eth1",
+            "state": "idle",
+            "speed_mbps": 10000,
+        },
+    )
 
 
 @pytest.mark.asyncio

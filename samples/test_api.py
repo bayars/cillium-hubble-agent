@@ -25,7 +25,7 @@ from api.services.link_state_service import reset_link_state_service
 
 def load_yaml_file(path: str) -> str:
     """Load YAML file content."""
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return f.read()
 
 
@@ -98,6 +98,7 @@ async def test_lab_exists_in_service(client: AsyncClient):
 
     # Check lab exists in link state service
     from api.services.link_state_service import get_link_state_service
+
     service = get_link_state_service()
     labs = await service.get_labs()
 
@@ -162,7 +163,9 @@ async def test_deploy_dual_labs_unique_links(client: AsyncClient):
         json={"name": "dc1", "namespace": "clab", "containerlab_yaml": dc1_yaml},
     )
     assert response1.status_code == 200
-    print(f"\nDC1 deployed: {response1.json()['nodes_discovered']} nodes, {response1.json()['links_discovered']} links")
+    print(
+        f"\nDC1 deployed: {response1.json()['nodes_discovered']} nodes, {response1.json()['links_discovered']} links"
+    )
 
     # Deploy DC2
     response2 = await client.post(
@@ -170,7 +173,9 @@ async def test_deploy_dual_labs_unique_links(client: AsyncClient):
         json={"name": "dc2", "namespace": "clab", "containerlab_yaml": dc2_yaml},
     )
     assert response2.status_code == 200
-    print(f"DC2 deployed: {response2.json()['nodes_discovered']} nodes, {response2.json()['links_discovered']} links")
+    print(
+        f"DC2 deployed: {response2.json()['nodes_discovered']} nodes, {response2.json()['links_discovered']} links"
+    )
 
     # Get all links
     response = await client.get("/api/links")
@@ -183,12 +188,13 @@ async def test_deploy_dual_labs_unique_links(client: AsyncClient):
     link_ids = [link["id"] for link in data["links"]]
     unique_ids = set(link_ids)
 
-    print(f"\nAll link IDs:")
+    print("\nAll link IDs:")
     for lid in sorted(link_ids):
         print(f"  - {lid}")
 
-    assert len(unique_ids) == len(link_ids), \
+    assert len(unique_ids) == len(link_ids), (
         f"Duplicate links found! Unique: {len(unique_ids)}, Total: {len(link_ids)}"
+    )
 
     # Verify both labs have links
     dc1_links = [lid for lid in link_ids if lid.startswith("dc1/")]
@@ -223,7 +229,8 @@ async def test_traffic_generator_in_links(client: AsyncClient):
 
     # Find traffic generator links
     tgen_links = [
-        link for link in data["links"]
+        link
+        for link in data["links"]
         if "tgen" in link["source"] or "tgen" in link["target"]
     ]
 
@@ -272,6 +279,7 @@ async def test_clear_lab_links(client: AsyncClient):
 
     # Clear DC1 via service directly (avoid K8s API)
     from api.services.link_state_service import get_link_state_service
+
     service = get_link_state_service()
     await service.clear_lab("dc1")
 
@@ -285,7 +293,9 @@ async def test_clear_lab_links(client: AsyncClient):
     # Verify no DC1 links remain
     data = response.json()
     for link in data["links"]:
-        assert not link["id"].startswith("dc1/"), f"DC1 link still present: {link['id']}"
+        assert not link["id"].startswith("dc1/"), (
+            f"DC1 link still present: {link['id']}"
+        )
         assert link["id"].startswith("dc2/"), f"Unexpected link: {link['id']}"
 
     print("\n✓ Clear lab links test PASSED")

@@ -17,13 +17,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.services.containerlab_parser import ContainerlabParser
-from api.services.link_state_service import get_link_state_service, reset_link_state_service
-from api.models.schemas import LabDeployRequest, Node, Link
+from api.services.link_state_service import (
+    get_link_state_service,
+    reset_link_state_service,
+)
 
 
 def load_yaml_file(path: str) -> str:
     """Load YAML file content."""
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return f.read()
 
 
@@ -37,14 +39,18 @@ async def test_containerlab_parser():
     yaml_content = load_yaml_file("samples/lab-dc1.yaml")
     nodes, links = ContainerlabParser.parse(yaml_content, "dc1")
 
-    print(f"\nParsed DC1 topology:")
+    print("\nParsed DC1 topology:")
     print(f"  Nodes: {len(nodes)}")
     for node in nodes:
-        print(f"    - {node.id} (label={node.label}, type={node.type}, platform={node.platform})")
+        print(
+            f"    - {node.id} (label={node.label}, type={node.type}, platform={node.platform})"
+        )
 
     print(f"\n  Links: {len(links)}")
     for link in links:
-        print(f"    - {link.id}: {link.source}:{link.source_interface} <-> {link.target}:{link.target_interface}")
+        print(
+            f"    - {link.id}: {link.source}:{link.source_interface} <-> {link.target}:{link.target_interface}"
+        )
 
     # Verify traffic generators are parsed correctly
     tgen_nodes = [n for n in nodes if "tgen" in n.id]
@@ -63,8 +69,12 @@ async def test_containerlab_parser():
 
     for link in links:
         assert link.id.startswith("dc1/"), f"Link ID not prefixed: {link.id}"
-        assert link.source.startswith("dc1/"), f"Link source not prefixed: {link.source}"
-        assert link.target.startswith("dc1/"), f"Link target not prefixed: {link.target}"
+        assert link.source.startswith("dc1/"), (
+            f"Link source not prefixed: {link.source}"
+        )
+        assert link.target.startswith("dc1/"), (
+            f"Link target not prefixed: {link.target}"
+        )
         assert link.lab == "dc1", f"Link lab not set: {link.lab}"
 
     print("\n✓ Containerlab parser test PASSED")
@@ -98,12 +108,12 @@ async def test_link_state_service():
 
     # Get topology by lab
     dc1_topo = await service.get_topology_by_lab("dc1")
-    print(f"\nDC1 topology:")
+    print("\nDC1 topology:")
     print(f"  Nodes: {dc1_topo['node_count']}")
     print(f"  Links: {dc1_topo['link_count']}")
 
-    assert dc1_topo['node_count'] == 5
-    assert dc1_topo['link_count'] == 5
+    assert dc1_topo["node_count"] == 5
+    assert dc1_topo["link_count"] == 5
 
     # Get all links
     all_links = await service.get_all_links()
@@ -151,8 +161,9 @@ async def test_dual_lab_deployment():
 
     # Verify uniqueness
     unique_ids = set(all_link_ids)
-    assert len(unique_ids) == len(all_link_ids), \
+    assert len(unique_ids) == len(all_link_ids), (
         f"Duplicate link IDs found! Unique: {len(unique_ids)}, Total: {len(all_link_ids)}"
+    )
 
     # Verify both labs are tracked
     labs = await service.get_labs()
@@ -163,12 +174,16 @@ async def test_dual_lab_deployment():
     dc1_topo = await service.get_topology_by_lab("dc1")
     dc2_topo = await service.get_topology_by_lab("dc2")
 
-    print(f"\nDC1 topology: {dc1_topo['node_count']} nodes, {dc1_topo['link_count']} links")
-    print(f"DC2 topology: {dc2_topo['node_count']} nodes, {dc2_topo['link_count']} links")
+    print(
+        f"\nDC1 topology: {dc1_topo['node_count']} nodes, {dc1_topo['link_count']} links"
+    )
+    print(
+        f"DC2 topology: {dc2_topo['node_count']} nodes, {dc2_topo['link_count']} links"
+    )
 
     # Verify isolation
-    dc1_link_ids = [link.id for link in dc1_topo['links']]
-    dc2_link_ids = [link.id for link in dc2_topo['links']]
+    dc1_link_ids = [link.id for link in dc1_topo["links"]]
+    dc2_link_ids = [link.id for link in dc2_topo["links"]]
 
     print(f"\nDC1 links: {dc1_link_ids}")
     print(f"DC2 links: {dc2_link_ids}")
@@ -209,7 +224,9 @@ async def test_traffic_generator_links():
         await service.add_link(link)
 
     # Find traffic generator links
-    tgen_links = [link for link in links if "tgen" in link.source or "tgen" in link.target]
+    tgen_links = [
+        link for link in links if "tgen" in link.source or "tgen" in link.target
+    ]
 
     print(f"\nTraffic generator links: {len(tgen_links)}")
     for link in tgen_links:
@@ -230,7 +247,9 @@ async def test_traffic_generator_links():
         print(f"    Platform: {node.platform}")
         print(f"    Kind: {node.metadata.get('kind')}")
         print(f"    Image: {node.metadata.get('image')}")
-        assert node.platform == "iperf", f"Expected platform 'iperf', got {node.platform}"
+        assert node.platform == "iperf", (
+            f"Expected platform 'iperf', got {node.platform}"
+        )
 
     print("\n✓ Traffic generator link info test PASSED")
 
@@ -273,8 +292,9 @@ async def test_clear_lab():
 
     assert "dc1" not in labs, "dc1 should be removed"
     assert "dc2" in labs, "dc2 should still exist"
-    assert len(all_links_after) == len(dc2_links), \
+    assert len(all_links_after) == len(dc2_links), (
         f"Expected {len(dc2_links)} links, got {len(all_links_after)}"
+    )
 
     # Verify only DC2 links remain
     for link in all_links_after:
@@ -306,6 +326,7 @@ async def main():
     except Exception as e:
         print(f"\n✗ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

@@ -33,12 +33,22 @@ async def test_add_node(client: AsyncClient):
 async def test_add_link(client: AsyncClient):
     """Test adding a link."""
     # Add nodes first
-    await client.post("/api/topology/nodes", json={
-        "id": "router1", "label": "R1", "type": "router",
-    })
-    await client.post("/api/topology/nodes", json={
-        "id": "router2", "label": "R2", "type": "router",
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "router1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "router2",
+            "label": "R2",
+            "type": "router",
+        },
+    )
 
     link = {
         "id": "link1",
@@ -59,19 +69,32 @@ async def test_add_link(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_topology_contains_added_items(client: AsyncClient):
     """Test topology returns added nodes and links."""
-    await client.post("/api/topology/nodes", json={
-        "id": "r1", "label": "R1", "type": "router",
-    })
-    await client.post("/api/topology/nodes", json={
-        "id": "r2", "label": "R2", "type": "router",
-    })
-    await client.post("/api/topology/links", json={
-        "id": "link1",
-        "source": "r1",
-        "target": "r2",
-        "source_interface": "eth0",
-        "target_interface": "eth0",
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r2",
+            "label": "R2",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/links",
+        json={
+            "id": "link1",
+            "source": "r1",
+            "target": "r2",
+            "source_interface": "eth0",
+            "target_interface": "eth0",
+        },
+    )
 
     response = await client.get("/api/topology")
     assert response.status_code == 200
@@ -83,9 +106,14 @@ async def test_topology_contains_added_items(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_remove_node(client: AsyncClient):
     """Test removing a node."""
-    await client.post("/api/topology/nodes", json={
-        "id": "r1", "label": "R1", "type": "router",
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
 
     response = await client.delete("/api/topology/nodes/r1")
     assert response.status_code == 200
@@ -97,19 +125,32 @@ async def test_remove_node(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_remove_link(client: AsyncClient):
     """Test removing a link."""
-    await client.post("/api/topology/nodes", json={
-        "id": "r1", "label": "R1", "type": "router",
-    })
-    await client.post("/api/topology/nodes", json={
-        "id": "r2", "label": "R2", "type": "router",
-    })
-    await client.post("/api/topology/links", json={
-        "id": "link1",
-        "source": "r1",
-        "target": "r2",
-        "source_interface": "eth0",
-        "target_interface": "eth0",
-    })
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r1",
+            "label": "R1",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/nodes",
+        json={
+            "id": "r2",
+            "label": "R2",
+            "type": "router",
+        },
+    )
+    await client.post(
+        "/api/topology/links",
+        json={
+            "id": "link1",
+            "source": "r1",
+            "target": "r2",
+            "source_interface": "eth0",
+            "target_interface": "eth0",
+        },
+    )
 
     response = await client.delete("/api/topology/links/link1")
     assert response.status_code == 200
