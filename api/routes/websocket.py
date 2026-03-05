@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from ..models.schemas import InterfaceEvent
-from ..services.event_bus import get_event_bus, Subscriber
+from ..services.event_bus import get_event_bus
 from ..services.link_state_service import get_link_state_service
 
 logger = logging.getLogger(__name__)

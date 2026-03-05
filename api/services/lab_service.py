@@ -18,11 +18,9 @@ from ..models.schemas import (
     LabStatus,
     LabDeployRequest,
     LabDeployResponse,
-    Node,
-    Link,
 )
 from .containerlab_parser import ContainerlabParser
-from .k8s_client import get_k8s_manager, K8sLabManager
+from .k8s_client import get_k8s_manager
 from .link_state_service import get_link_state_service
 
 logger = logging.getLogger(__name__)

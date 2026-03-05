@@ -27,7 +27,7 @@ async def get_links(
     links = await service.get_all_links()
 
     if state:
-        links = [l for l in links if l.state == state]
+        links = [link for link in links if link.state == state]
 
     return LinksResponse(
         links=links,

@@ -74,9 +74,6 @@ class ContainerlabParser:
         nodes = []
         nodes_section = topology.get("nodes", {})
 
-        # Get kind defaults
-        kinds_section = topology.get("kinds", {})
-
         for node_name, node_config in nodes_section.items():
             node_config = node_config or {}
 

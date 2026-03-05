@@ -12,8 +12,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Optional
-from weakref import WeakSet
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 

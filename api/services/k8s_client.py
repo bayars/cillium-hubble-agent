@@ -8,7 +8,6 @@ import asyncio
 import logging
 from typing import AsyncIterator, Optional
 
-import yaml
 
 try:
     from kubernetes_asyncio import client, config, watch
@@ -325,7 +324,6 @@ class K8sLabManager:
                 timeout_seconds=timeout,
             ):
                 event_type = event.get("type")
-                obj = event.get("object", {})
 
                 if event_type == "DELETED":
                     yield LabStatus.DELETED

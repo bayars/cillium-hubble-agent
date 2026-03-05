@@ -1,2 +1,2 @@
 # API Routes
-from . import topology, links, websocket, events
+from . import topology as topology, links as links, websocket as websocket, events as events

@@ -17,12 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .models.schemas import (
-    HealthResponse, ErrorResponse, TopologyResponse,
-    Node, Link, LinkState, NodeStatus,
+    HealthResponse, ErrorResponse, Node, Link, LinkState, NodeStatus,
 )
 from .routes import topology, links, websocket, events, labs
 from .services.link_state_service import get_link_state_service
-from .services.event_bus import get_event_bus
 
 logger = logging.getLogger(__name__)
 

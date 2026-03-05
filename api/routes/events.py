@@ -4,7 +4,7 @@ Events API routes - Event ingestion from agents.
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from ..models.schemas import InterfaceEvent, LinkStateEvent
 from ..services.link_state_service import get_link_state_service

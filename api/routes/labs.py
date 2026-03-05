@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 
 from ..models.schemas import (
     Lab,
-    LabStatus,
     LabDeployRequest,
     LabDeployResponse,
     LabListResponse,

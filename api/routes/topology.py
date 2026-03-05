@@ -2,7 +2,7 @@
 Topology API routes - Full network graph for Cytoscape.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from ..models.schemas import TopologyResponse, Node, Link
 from ..services.link_state_service import get_link_state_service

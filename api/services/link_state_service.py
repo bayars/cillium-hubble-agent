@@ -13,8 +13,7 @@ from datetime import datetime
 from typing import Optional
 
 from ..models.schemas import (
-    Node, Link, LinkState, LinkMetrics, NodeStatus,
-    TopologyResponse, LinkStateEvent, InterfaceEvent,
+    Node, Link, LinkState, LinkMetrics, TopologyResponse, LinkStateEvent, InterfaceEvent,
 )
 from .event_bus import get_event_bus
 
@@ -47,7 +46,7 @@ class LinkStateService:
         """
         async with self._lock:
             self._nodes = {n.id: n for n in nodes}
-            self._links = {l.id: l for l in links}
+            self._links = {link.id: link for link in links}
 
             # Build interface -> link mapping
             self._interface_to_link.clear()
