@@ -5,20 +5,29 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "network-monitor.labels" . | nindent 4 }}
-    app.kubernetes.io/component: api
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "network-monitor.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: api
   template:
     metadata:
       labels:
         {{- include "network-monitor.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: api
     spec:
       serviceAccountName: {{ include "network-monitor.serviceAccountName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

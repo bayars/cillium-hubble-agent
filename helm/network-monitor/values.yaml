@@ -3,12 +3,15 @@
 replicaCount: 1
 
 image:
-  repository: 10.0.0.100/library/network-monitor-v2
+  repository: ghcr.io/bayars/network-monitor
   tag: latest
   pullPolicy: Always
 
+nameOverride: ""
+fullnameOverride: ""
+
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 8000
 
 resources:
@@ -43,11 +46,17 @@ rbac:
 serviceAccount:
   create: true
   name: ""
+  annotations: {}
 
 # Ingress
 ingress:
-  enabled: true
+  enabled: false
   className: ""
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+  annotations: {}
   host: network-monitor.local
+  tls: []
+
+# Node selector, tolerations, affinity
+nodeSelector: {}
+tolerations: []
+affinity: {}
