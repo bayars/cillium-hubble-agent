@@ -17,7 +17,7 @@ RUN curl -L --remote-name-all https://github.com/cilium/hubble/releases/download
     && rm hubble-linux-amd64.tar.gz
 
 # Install uv for package management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=docker.io/astral/uv:latest /uv /uvx /bin/
 
 # Copy project files
 COPY pyproject.toml .
