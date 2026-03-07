@@ -41,8 +41,8 @@ spec:
               value: {{ .Values.config.logLevel | quote }}
             - name: DEMO_MODE
               value: {{ .Values.config.demoMode | quote }}
-            - name: DISCOVERY_MODE
-              value: {{ .Values.config.discoveryMode | quote }}
+            - name: HUBBLE_ENABLED
+              value: {{ .Values.config.hubbleEnabled | quote }}
             - name: HUBBLE_RELAY_ADDR
               value: {{ .Values.config.hubbleRelayAddr | quote }}
             - name: IDLE_TIMEOUT_SECONDS

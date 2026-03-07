@@ -9,6 +9,7 @@ Hubble Relay and streaming flow events. Detects:
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -150,32 +151,12 @@ class HubbleMonitor:
     traffic activity between endpoints.
     """
 
-    # Hubble Observer service proto (simplified inline definition)
-    # In production, generate from: https://github.com/cilium/cilium/tree/main/api/v1/observer
-    OBSERVER_PROTO = """
-    syntax = "proto3";
-    package observer;
-
-    service Observer {
-        rpc GetFlows(GetFlowsRequest) returns (stream GetFlowsResponse);
-        rpc ServerStatus(ServerStatusRequest) returns (ServerStatusResponse);
-    }
-    """
-
     def __init__(
         self,
         relay_addr: str = "hubble-relay:4245",
         idle_timeout_seconds: float = 5.0,
         callback: Optional[Callable[[LinkStateChange], None]] = None,
     ):
-        """
-        Initialize Hubble monitor.
-
-        Args:
-            relay_addr: Hubble Relay gRPC address (host:port)
-            idle_timeout_seconds: Seconds without flows before marking idle
-            callback: Optional callback for state changes
-        """
         if not GRPC_AVAILABLE:
             raise RuntimeError(
                 "grpcio is required for Hubble monitoring. Install with: pip install grpcio"
@@ -189,14 +170,11 @@ class HubbleMonitor:
         self._running = False
 
         # Flow tracking
-        self._flow_last_seen: dict[str, datetime] = {}  # flow_key -> last_seen
-        self._flow_states: dict[str, LinkState] = {}  # flow_key -> current_state
-        self._flow_endpoints: dict[
-            str, tuple[Endpoint, Endpoint]
-        ] = {}  # flow_key -> (src, dst)
+        self._flow_last_seen: dict[str, datetime] = {}
+        self._flow_states: dict[str, LinkState] = {}
+        self._flow_endpoints: dict[str, tuple[Endpoint, Endpoint]] = {}
         self._event_queue: asyncio.Queue[LinkStateChange] = asyncio.Queue()
 
-        # Idle detection task
         self._idle_check_task: Optional[asyncio.Task] = None
 
     async def connect(self):
@@ -205,7 +183,6 @@ class HubbleMonitor:
 
         self._channel = grpc_aio.insecure_channel(self.relay_addr)
 
-        # Wait for channel to be ready
         try:
             await asyncio.wait_for(self._channel.channel_ready(), timeout=10.0)
             logger.info("Connected to Hubble Relay")
@@ -279,19 +256,17 @@ class HubbleMonitor:
         flow_key = flow.flow_key
         now = datetime.now()
 
-        # Store endpoint info
         self._flow_endpoints[flow_key] = (flow.source, flow.destination)
         self._flow_last_seen[flow_key] = now
 
         old_state = self._flow_states.get(flow_key, LinkState.UNKNOWN)
 
-        # Determine new state based on verdict
         if flow.verdict == FlowVerdict.DROPPED:
             new_state = LinkState.DOWN
         elif flow.verdict == FlowVerdict.FORWARDED:
             new_state = LinkState.ACTIVE
         else:
-            new_state = old_state  # Keep current state for other verdicts
+            new_state = old_state
 
         if old_state != new_state:
             self._flow_states[flow_key] = new_state
@@ -309,7 +284,7 @@ class HubbleMonitor:
         """Periodically check for flows that have gone idle."""
         while self._running:
             try:
-                await asyncio.sleep(1.0)  # Check every second
+                await asyncio.sleep(1.0)
 
                 now = datetime.now()
                 idle_threshold = now - self.idle_timeout
@@ -341,43 +316,12 @@ class HubbleMonitor:
             except Exception as e:
                 logger.error(f"Error in idle check: {e}")
 
-    async def _observe_flows_grpc(self) -> AsyncIterator[FlowEvent]:
+    async def observe_flows(self) -> AsyncIterator[FlowEvent]:
         """
-        Stream flows from Hubble Relay via gRPC.
+        Stream flows via Hubble CLI.
 
-        Note: This is a simplified implementation. In production, use
-        generated protobuf stubs from Cilium repo.
+        Uses `hubble observe --output json` to stream flows from Hubble Relay.
         """
-        if not self._channel:
-            await self.connect()
-
-        # Create stub for Observer service
-        # In production, use: observer_pb2_grpc.ObserverStub(self._channel)
-        # Here we use reflection or dynamic stub
-
-        logger.info("Starting flow observation...")
-
-        # For now, yield a placeholder - actual implementation requires
-        # compiled protobuf stubs from Cilium
-        logger.warning(
-            "Hubble gRPC observation requires compiled protobuf stubs. "
-            "See: https://github.com/cilium/cilium/tree/main/api/v1/observer"
-        )
-
-        # Simulate flow stream for testing
-        while self._running:
-            await asyncio.sleep(1.0)
-            # In production, this would yield actual flows from gRPC stream
-
-    async def observe_flows_http(self) -> AsyncIterator[FlowEvent]:
-        """
-        Alternative: Stream flows via Hubble CLI subprocess.
-
-        Uses `hubble observe --output json` as a fallback when
-        gRPC stubs are not available.
-        """
-        import json
-
         cmd = [
             "hubble",
             "observe",
@@ -425,7 +369,6 @@ class HubbleMonitor:
         await self.connect()
         self._running = True
 
-        # Start idle detection
         self._idle_check_task = asyncio.create_task(self._check_idle_flows())
 
         logger.info("Hubble monitor started")
@@ -459,8 +402,7 @@ class HubbleMonitor:
         await self.start()
 
         try:
-            # Try HTTP/CLI method as fallback
-            async for flow in self.observe_flows_http():
+            async for flow in self.observe_flows():
                 change = self._update_flow_state(flow)
                 if change:
                     await self._event_queue.put(change)
@@ -487,31 +429,3 @@ class HubbleMonitor:
     @property
     def is_running(self) -> bool:
         return self._running
-
-
-# Standalone usage example
-async def main():
-    """Example usage of HubbleMonitor."""
-
-    def on_change(event: LinkStateChange):
-        print(
-            f"[{event.timestamp}] {event.flow_key}: {event.old_state.value} -> {event.new_state.value}"
-        )
-
-    monitor = HubbleMonitor(
-        relay_addr="hubble-relay.kube-system.svc:4245",
-        idle_timeout_seconds=5.0,
-        callback=on_change,
-    )
-
-    try:
-        await monitor.run()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        await monitor.stop()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())

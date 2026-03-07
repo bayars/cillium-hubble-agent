@@ -227,8 +227,9 @@ class HealthResponse(BaseModel):
     status: str = Field("healthy")
     version: str = Field("1.0.0")
     uptime_seconds: float = Field(0.0)
-    connected_agents: int = Field(0)
+    connected_clients: int = Field(0)
     monitored_links: int = Field(0)
+    hubble_connected: bool = Field(False)
     timestamp: datetime = Field(default_factory=datetime.now)
 
 

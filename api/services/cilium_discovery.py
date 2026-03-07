@@ -114,14 +114,6 @@ class CiliumEndpointDiscovery:
         label_selector: Optional[str] = None,
         callback: Optional[Callable[[EndpointEvent], None]] = None,
     ):
-        """
-        Initialize endpoint discovery.
-
-        Args:
-            namespace: Namespace to watch (None for all namespaces)
-            label_selector: Optional label selector to filter endpoints
-            callback: Optional callback for endpoint events
-        """
         if not K8S_AVAILABLE:
             raise RuntimeError(
                 "kubernetes-asyncio is required for endpoint discovery. "
@@ -145,23 +137,17 @@ class CiliumEndpointDiscovery:
 
         logger.info("Starting Cilium endpoint discovery...")
 
-        # Load kubernetes config
         try:
-            # Try in-cluster config first
             config.load_incluster_config()
             logger.info("Loaded in-cluster Kubernetes config")
         except config.ConfigException:
-            # Fall back to kubeconfig
             await config.load_kube_config()
             logger.info("Loaded kubeconfig")
 
         self._api = client.CustomObjectsApi()
         self._running = True
 
-        # List existing endpoints
         await self._list_endpoints()
-
-        # Start watch task
         self._watch_task = asyncio.create_task(self._watch_endpoints())
 
         logger.info(f"Discovered {len(self._endpoints)} endpoints")
@@ -186,7 +172,6 @@ class CiliumEndpointDiscovery:
         status = obj.get("status", {})
         networking = status.get("networking", {})
 
-        # Get IPv4/IPv6 addresses
         addresses = networking.get("addressing", [])
         ipv4 = ""
         ipv6 = ""
@@ -196,14 +181,12 @@ class CiliumEndpointDiscovery:
             if "ipv6" in addr:
                 ipv6 = addr["ipv6"]
 
-        # Determine state
         state = EndpointState.UNKNOWN
         if status.get("state") == "ready":
             state = EndpointState.READY
         elif status.get("state") == "not-ready":
             state = EndpointState.NOT_READY
 
-        # Get identity
         identity = status.get("identity", {})
         identity_id = identity.get("id", 0)
 
@@ -212,7 +195,7 @@ class CiliumEndpointDiscovery:
             namespace=metadata.get("namespace", "default"),
             identity=identity_id,
             node_name=networking.get("node", ""),
-            pod_name=metadata.get("name", ""),  # Usually same as endpoint name
+            pod_name=metadata.get("name", ""),
             ipv4_address=ipv4,
             ipv6_address=ipv6,
             state=state,
@@ -286,13 +269,11 @@ class CiliumEndpointDiscovery:
                         endpoint=endpoint,
                     )
 
-                    # Update internal state
                     if event_type == "ADDED" or event_type == "MODIFIED":
                         self._endpoints[endpoint.id] = endpoint
                     elif event_type == "DELETED":
                         self._endpoints.pop(endpoint.id, None)
 
-                    # Emit event
                     await self._event_queue.put(endpoint_event)
                     if self.callback:
                         self.callback(endpoint_event)
@@ -302,7 +283,7 @@ class CiliumEndpointDiscovery:
             except asyncio.CancelledError:
                 break
             except ApiException as e:
-                if e.status == 410:  # Gone - resource version too old
+                if e.status == 410:
                     logger.warning("Watch expired, restarting...")
                     await asyncio.sleep(1)
                     continue
@@ -344,33 +325,3 @@ class CiliumEndpointDiscovery:
     @property
     def endpoint_count(self) -> int:
         return len(self._endpoints)
-
-
-# Standalone usage example
-async def main():
-    """Example usage of CiliumEndpointDiscovery."""
-
-    def on_event(event: EndpointEvent):
-        print(
-            f"[{event.type.value}] {event.endpoint.id} - "
-            f"IP: {event.endpoint.ipv4_address}, Node: {event.endpoint.node_name}"
-        )
-
-    discovery = CiliumEndpointDiscovery(callback=on_event)
-
-    try:
-        await discovery.start()
-        print(f"Watching {discovery.endpoint_count} endpoints. Press Ctrl+C to stop.")
-
-        async for event in discovery.events():
-            print(f"Event: {event.to_dict()}")
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        await discovery.stop()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())

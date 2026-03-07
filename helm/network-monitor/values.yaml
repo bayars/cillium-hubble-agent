@@ -40,7 +40,7 @@ resources:
 config:
   logLevel: INFO
   demoMode: "false"
-  discoveryMode: hubble
+  hubbleEnabled: "true"
   hubbleRelayAddr: hubble-relay.kube-system.svc.cluster.local:4245
   idleTimeoutSeconds: "5"
 

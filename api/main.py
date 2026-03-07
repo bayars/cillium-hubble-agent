@@ -3,7 +3,7 @@ Network Monitor API - FastAPI Application.
 
 Provides REST API and WebSocket endpoints for:
 - Network topology visualization (Cytoscape)
-- Link state monitoring
+- Link state monitoring (via Cilium Hubble)
 - Real-time event streaming
 """
 
@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from .models.schemas import (
     HealthResponse, ErrorResponse, Node, Link, LinkState, NodeStatus,
 )
-from .routes import topology, links, websocket, events, labs
+from .routes import topology as topology, links as links, websocket as websocket, events as events, labs as labs
 from .services.link_state_service import get_link_state_service
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ async def initialize_demo_topology():
     ]
 
     # Demo links
-    links = [
+    demo_links = [
         Link(
             id="link1",
             source="router1",
@@ -90,7 +90,7 @@ async def initialize_demo_topology():
         ),
     ]
 
-    await service.initialize_topology(nodes, links)
+    await service.initialize_topology(nodes, demo_links)
     logger.info("Demo topology initialized")
 
 
@@ -104,8 +104,24 @@ async def lifespan(app: FastAPI):
     if os.environ.get("DEMO_MODE", "true").lower() == "true":
         await initialize_demo_topology()
 
+    # Start Hubble integration if enabled
+    hubble_enabled = os.environ.get("HUBBLE_ENABLED", "false").lower() == "true"
+    if hubble_enabled:
+        from .services.hubble_service import start_hubble_service
+        try:
+            await start_hubble_service()
+        except Exception as e:
+            logger.error(f"Failed to start Hubble service: {e}")
+            logger.warning("Continuing without Hubble integration")
+
     logger.info("Network Monitor API started")
     yield
+
+    # Shutdown
+    if hubble_enabled:
+        from .services.hubble_service import stop_hubble_service
+        await stop_hubble_service()
+
     logger.info("Shutting down Network Monitor API...")
 
 
@@ -119,8 +135,9 @@ app = FastAPI(
     - **Topology**: Get complete network graph for Cytoscape visualization
     - **Links**: Query and update link states and metrics
     - **Labs**: Deploy and manage Clabernetes labs with auto-topology parsing
-    - **Events**: Submit state change events from monitoring agents
+    - **Events**: Submit state change events
     - **WebSocket**: Real-time event streaming for live updates
+    - **Hubble**: Direct Cilium Hubble integration for flow monitoring
 
     ## Link States
     - `active`: Link is up and traffic is flowing
@@ -160,17 +177,20 @@ app.include_router(websocket.router)
 async def health_check():
     """Health check endpoint."""
     from .routes.websocket import get_connection_manager
+    from .services.hubble_service import get_hubble_service
 
     service = get_link_state_service()
     stats = service.get_stats()
     ws_manager = get_connection_manager()
+    hubble = get_hubble_service()
 
     return HealthResponse(
         status="healthy",
         version="1.0.0",
         uptime_seconds=(datetime.now() - START_TIME).total_seconds(),
-        connected_agents=ws_manager.connection_count,
+        connected_clients=ws_manager.connection_count,
         monitored_links=stats["link_count"],
+        hubble_connected=hubble.is_running if hubble else False,
     )
 
 

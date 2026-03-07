@@ -10,7 +10,6 @@ from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
-from ..models.schemas import InterfaceEvent
 from ..services.event_bus import get_event_bus
 from ..services.link_state_service import get_link_state_service
 
@@ -123,45 +122,6 @@ async def websocket_events(
     finally:
         await event_bus.unsubscribe(subscriber)
         manager.disconnect(websocket)
-
-
-@router.websocket("/ws/agent")
-async def websocket_agent(websocket: WebSocket):
-    """
-    WebSocket endpoint for monitoring agents.
-
-    Agents connect here to push state change events.
-    """
-    await websocket.accept()
-    logger.info("Agent connected via WebSocket")
-
-    service = get_link_state_service()
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-
-            # Parse agent event
-            try:
-                event = InterfaceEvent(**data)
-                await service.handle_agent_event(event)
-
-                await websocket.send_json({
-                    "status": "ok",
-                    "message": f"Processed event for {event.interface}",
-                })
-
-            except Exception as e:
-                logger.error(f"Error processing agent event: {e}")
-                await websocket.send_json({
-                    "status": "error",
-                    "message": str(e),
-                })
-
-    except WebSocketDisconnect:
-        logger.info("Agent disconnected")
-    except Exception as e:
-        logger.error(f"Agent WebSocket error: {e}")
 
 
 def get_connection_manager() -> ConnectionManager:

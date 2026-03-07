@@ -85,9 +85,9 @@ spec:
               value: "INFO"
             - name: DEMO_MODE
               value: "false"
-            # Hubble Relay configuration
-            - name: DISCOVERY_MODE
-              value: "hubble"
+            # Hubble integration
+            - name: HUBBLE_ENABLED
+              value: "true"
             - name: HUBBLE_RELAY_ADDR
               value: "hubble-relay.kube-system.svc.cluster.local:4245"
             - name: IDLE_TIMEOUT_SECONDS
