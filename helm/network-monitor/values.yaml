@@ -7,26 +7,75 @@ image:
   tag: latest
   pullPolicy: Always
 
+# Private registry credentials
+# imagePullSecrets:
+#   - name: harbor-credentials
+imagePullSecrets: []
+
 nameOverride: ""
 fullnameOverride: ""
+
+# Pod-level annotations (e.g. for cloud workload identity, Prometheus scraping)
+# podAnnotations:
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "8000"
+#   # GKE Workload Identity
+#   iam.gke.io/gsa-email: "sa@project.iam.gserviceaccount.com"
+podAnnotations: {}
+
+podLabels: {}
 
 service:
   type: ClusterIP
   port: 8000
-  annotations: {}
-  # loadBalancerIP: ""
+
+  # Static IP for LoadBalancer (legacy field, prefer cloud-specific annotations)
+  loadBalancerIP: ""
+
+  # Restrict source IPs that can reach the LoadBalancer
+  # loadBalancerSourceRanges:
+  #   - 10.0.0.0/8
+  #   - 203.0.113.0/24
+  loadBalancerSourceRanges: []
+
+  # Preserve client source IP (Local) or use cluster routing (Cluster)
+  # Use "Local" when you need real client IPs (e.g. for audit logging)
+  # externalTrafficPolicy: Local
+  externalTrafficPolicy: ""
+
+  # Static NodePort (only used when service.type=NodePort)
+  # nodePort: 30800
+  nodePort: null
+
+  # Service annotations — required for cloud LB IP assignment and configuration
   #
-  # Cloud LB annotations examples:
-  # GKE:
+  # GKE (external LB with static IP):
+  #   networking.gke.io/load-balancer-ip-address: "my-static-ip-name"
+  #   cloud.google.com/load-balancer-type: "External"
+  #
+  # GKE (internal LB):
   #   cloud.google.com/load-balancer-type: "Internal"
-  #   networking.gke.io/load-balancer-ip-address: "my-ip"
-  # AWS:
-  #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  #   networking.gke.io/internal-load-balancer-subnet: "my-subnet"
+  #
+  # AWS (NLB with Elastic IP):
+  #   service.beta.kubernetes.io/aws-load-balancer-type: "external"
+  #   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
   #   service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-  #   service.beta.kubernetes.io/aws-load-balancer-eip-allocations: "eipalloc-xxx"
-  # Azure:
+  #   service.beta.kubernetes.io/aws-load-balancer-eip-allocations: "eipalloc-xxx,eipalloc-yyy"
+  #
+  # AWS (internal NLB):
+  #   service.beta.kubernetes.io/aws-load-balancer-type: "external"
+  #   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+  #   service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+  #
+  # Azure (public LB with static IP):
+  #   service.beta.kubernetes.io/azure-pip-name: "my-pip-name"
+  #   service.beta.kubernetes.io/azure-dns-label-name: "my-hostname"
+  #
+  # Azure (internal LB):
   #   service.beta.kubernetes.io/azure-load-balancer-internal: "true"
-  #   service.beta.kubernetes.io/azure-pip-name: "my-pip"
+  #   service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "my-subnet"
+  annotations: {}
 
 resources:
   requests:
@@ -60,15 +109,46 @@ rbac:
 serviceAccount:
   create: true
   name: ""
+  # Annotations for cloud workload identity
+  #
+  # GKE Workload Identity:
+  #   iam.gke.io/gsa-email: "sa@project.iam.gserviceaccount.com"
+  #
+  # AWS IRSA (IAM Roles for Service Accounts):
+  #   eks.amazonaws.com/role-arn: "arn:aws:iam::123456789:role/network-monitor"
+  #
+  # Azure Workload Identity:
+  #   azure.workload.identity/client-id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
   annotations: {}
 
 # Ingress
 ingress:
   enabled: false
   className: ""
+  # Ingress annotations by controller:
+  #
+  # nginx:
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  #
+  # GKE (Google-managed certificate):
+  #   networking.gke.io/managed-certificates: "network-monitor-cert"
+  #   kubernetes.io/ingress.class: "gce"
+  #
+  # AWS ALB:
+  #   kubernetes.io/ingress.class: "alb"
+  #   alb.ingress.kubernetes.io/scheme: "internet-facing"
+  #   alb.ingress.kubernetes.io/target-type: "ip"
+  #
+  # Azure AGIC:
+  #   kubernetes.io/ingress.class: "azure/application-gateway"
   annotations: {}
   host: network-monitor.local
   tls: []
+  # tls:
+  #   - secretName: network-monitor-tls
+  #     hosts:
+  #       - network-monitor.example.com
 
 # Node selector, tolerations, affinity
 nodeSelector: {}
