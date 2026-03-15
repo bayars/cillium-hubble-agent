@@ -51,39 +51,185 @@ helm uninstall network-monitor --namespace network-monitor
 
 ## Values Reference
 
+### Image
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `replicaCount` | `1` | Number of API replicas |
 | `image.repository` | `ghcr.io/bayars/network-monitor` | Container image |
 | `image.tag` | `latest` | Image tag |
 | `image.pullPolicy` | `Always` | Image pull policy |
+| `imagePullSecrets` | `[]` | Docker registry credentials (e.g. `[{name: harbor-creds}]`) |
 | `nameOverride` | `""` | Override chart name |
 | `fullnameOverride` | `""` | Override full release name |
-| `service.type` | `ClusterIP` | Service type (`ClusterIP`, `NodePort`, `LoadBalancer`) |
+
+### Service
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `service.type` | `ClusterIP` | `ClusterIP`, `NodePort`, or `LoadBalancer` |
 | `service.port` | `8000` | Service port |
-| `config.logLevel` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `service.annotations` | `{}` | Service annotations (cloud LB config) |
+| `service.loadBalancerIP` | `""` | Static LB IP (legacy, prefer annotations) |
+| `service.loadBalancerSourceRanges` | `[]` | CIDR ranges allowed to reach the LB |
+| `service.externalTrafficPolicy` | `""` | `Local` (preserve client IP) or `Cluster` |
+| `service.nodePort` | `null` | Static NodePort (only for `NodePort` type) |
+
+### Application
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `config.logLevel` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `config.demoMode` | `"false"` | Initialize with demo topology |
-| `config.discoveryMode` | `hubble` | Discovery mode (`hubble` or `sysfs`) |
+| `config.hubbleEnabled` | `"true"` | Enable Cilium Hubble integration |
 | `config.hubbleRelayAddr` | `hubble-relay.kube-system.svc.cluster.local:4245` | Hubble Relay gRPC address |
 | `config.idleTimeoutSeconds` | `"5"` | Seconds before marking link idle |
+
+### Pod
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `podAnnotations` | `{}` | Pod annotations (Prometheus, workload identity) |
+| `podLabels` | `{}` | Additional pod labels |
 | `resources.requests.cpu` | `100m` | CPU request |
 | `resources.requests.memory` | `128Mi` | Memory request |
 | `resources.limits.cpu` | `500m` | CPU limit |
 | `resources.limits.memory` | `256Mi` | Memory limit |
-| `rbac.create` | `true` | Create ClusterRole and ClusterRoleBinding |
-| `serviceAccount.create` | `true` | Create ServiceAccount |
-| `serviceAccount.name` | `""` | Override ServiceAccount name |
-| `serviceAccount.annotations` | `{}` | ServiceAccount annotations |
-| `ingress.enabled` | `false` | Enable Ingress resource |
-| `ingress.className` | `""` | Ingress class name |
-| `ingress.annotations` | `{}` | Ingress annotations |
-| `ingress.host` | `network-monitor.local` | Ingress hostname |
-| `ingress.tls` | `[]` | TLS configuration |
 | `nodeSelector` | `{}` | Node selector |
 | `tolerations` | `[]` | Tolerations |
 | `affinity` | `{}` | Affinity rules |
 
-## Example values.yaml
+### RBAC & ServiceAccount
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `rbac.create` | `true` | Create ClusterRole and ClusterRoleBinding |
+| `serviceAccount.create` | `true` | Create ServiceAccount |
+| `serviceAccount.name` | `""` | Override ServiceAccount name |
+| `serviceAccount.annotations` | `{}` | SA annotations (cloud workload identity) |
+
+### Ingress
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ingress.enabled` | `false` | Enable Ingress resource |
+| `ingress.className` | `""` | Ingress class (`nginx`, `gce`, `alb`, etc.) |
+| `ingress.annotations` | `{}` | Ingress annotations |
+| `ingress.host` | `network-monitor.local` | Ingress hostname |
+| `ingress.tls` | `[]` | TLS configuration |
+
+---
+
+## Cloud Platform Examples
+
+### GKE - External LoadBalancer with Static IP
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    networking.gke.io/load-balancer-ip-address: "my-reserved-ip-name"
+    cloud.google.com/load-balancer-type: "External"
+  externalTrafficPolicy: Local
+
+serviceAccount:
+  annotations:
+    iam.gke.io/gsa-email: "network-monitor@my-project.iam.gserviceaccount.com"
+```
+
+### GKE - Internal LoadBalancer
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    cloud.google.com/load-balancer-type: "Internal"
+    networking.gke.io/internal-load-balancer-subnet: "my-subnet"
+  loadBalancerSourceRanges:
+    - 10.0.0.0/8
+```
+
+### AWS EKS - NLB with Elastic IP
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-eip-allocations: "eipalloc-xxx,eipalloc-yyy"
+  externalTrafficPolicy: Local
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789:role/network-monitor"
+```
+
+### AWS EKS - Internal NLB
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+  loadBalancerSourceRanges:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+```
+
+### Azure AKS - Public LB with Static IP
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/azure-pip-name: "my-pip-name"
+    service.beta.kubernetes.io/azure-dns-label-name: "network-monitor"
+
+serviceAccount:
+  annotations:
+    azure.workload.identity/client-id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+### Azure AKS - Internal LB
+
+```yaml
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "my-subnet"
+  loadBalancerSourceRanges:
+    - 10.0.0.0/8
+```
+
+### On-Prem with MetalLB
+
+```yaml
+service:
+  type: LoadBalancer
+  loadBalancerIP: "192.168.1.100"
+  externalTrafficPolicy: Local
+```
+
+### Private Registry (Harbor)
+
+```yaml
+image:
+  repository: harbor.internal/library/network-monitor
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: harbor-credentials
+```
+
+---
+
+## Full Example values.yaml
 
 ```yaml
 replicaCount: 2
@@ -94,15 +240,30 @@ image:
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   port: 8000
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 203.0.113.0/24
 
 config:
   logLevel: INFO
   demoMode: "false"
-  discoveryMode: hubble
+  hubbleEnabled: "true"
   hubbleRelayAddr: hubble-relay.kube-system.svc.cluster.local:4245
   idleTimeoutSeconds: "5"
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789:role/network-monitor"
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
 
 ingress:
   enabled: true
