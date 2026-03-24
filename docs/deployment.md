@@ -197,6 +197,53 @@ helm upgrade network-monitor helm/network-monitor \
 
 ---
 
+## Interface Metrics
+
+### Sidecar Agent (Recommended)
+
+The sidecar is injected into every Clabernetes topology pod via `extraContainers`. It reads `/sys/class/net/*/statistics/` directly — zero K8s API overhead, captures **all** traffic (ping, ssh, scp, routing protocols), and sees every interface (linecards, CPM, mgmt).
+
+Add to your Clabernetes Helm values:
+
+```yaml
+globalConfig:
+  deployment:
+    extraContainers:
+      - name: netmon-sidecar
+        image: ghcr.io/bayars/netmon-sidecar:latest
+        env:
+          - name: API_URL
+            value: "http://network-monitor.network-monitor.svc:8000"
+          - name: POLL_INTERVAL_MS
+            value: "2000"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_URL` | (required) | Network Monitor API URL |
+| `POLL_INTERVAL_MS` | `2000` | Collection interval in milliseconds |
+| `EXCLUDE_IFACES` | `lo` | Comma-separated interfaces to skip |
+
+Lower `POLL_INTERVAL_MS` for more responsive updates (e.g., `500` for near-real-time), or raise it to reduce load.
+
+### Standalone Collector (Fallback)
+
+For environments where sidecar injection is not possible, the standalone collector uses `kubectl exec` to read `/proc/net/dev` from each pod:
+
+```bash
+kubectl apply -f k8s/collector.yaml
+```
+
+---
+
 ## k3s / k3d
 
 ```bash

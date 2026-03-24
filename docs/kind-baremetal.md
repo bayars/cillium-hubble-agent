@@ -513,7 +513,7 @@ wscat -c ws://<NETWORK_MONITOR_URL>/ws/events
 
 ### 7. Demo Traffic Scripts
 
-Run the demo scripts to simulate traffic against the API:
+Run the demo scripts to generate and view traffic:
 
 ```bash
 export API_URL=http://<NETWORK_MONITOR_URL>
@@ -524,7 +524,7 @@ export API_URL=http://<NETWORK_MONITOR_URL>
 # Visual dashboard
 ./demo/dashboard.sh $API_URL
 
-# Simulate traffic (200 Mbps for 30 seconds)
+# Run real iperf3 traffic (200 Mbps for 30 seconds)
 API_URL=$API_URL ./demo/traffic.sh dc2 200 30
 
 # List labs

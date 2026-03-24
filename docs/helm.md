@@ -25,7 +25,6 @@ helm install network-monitor helm/network-monitor \
   --namespace network-monitor \
   --create-namespace \
   --set config.logLevel=DEBUG \
-  --set config.demoMode="true" \
   --set service.type=LoadBalancer
 
 # Or with a values file
@@ -80,10 +79,24 @@ helm uninstall network-monitor --namespace network-monitor
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `config.logLevel` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `config.demoMode` | `"false"` | Initialize with demo topology |
 | `config.hubbleEnabled` | `"true"` | Enable Cilium Hubble integration |
 | `config.hubbleRelayAddr` | `hubble-relay.kube-system.svc.cluster.local:4245` | Hubble Relay gRPC address |
 | `config.idleTimeoutSeconds` | `"5"` | Seconds before marking link idle |
+
+### Interface Metrics Collector
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `collector.enabled` | `false` | Deploy the interface metrics collector |
+| `collector.image.repository` | `ghcr.io/bayars/netmon-collector` | Collector image |
+| `collector.image.tag` | `latest` | Collector image tag |
+| `collector.pollIntervalMs` | `2000` | Collection interval in milliseconds |
+| `collector.namespace` | `clab` | Namespace where target pods run |
+| `collector.podSelector` | `clabernetes/app=clabernetes` | Label selector for target pods |
+| `collector.excludeInterfaces` | `lo` | Comma-separated interfaces to skip |
+| `collector.logLevel` | `INFO` | Collector log level |
+
+The collector reads `/proc/net/dev` from each target pod via `kubectl exec` and captures **all** kernel-level traffic (ping, ssh, scp, routing protocols, etc.). Adjust `pollIntervalMs` for faster or slower updates.
 
 ### Pod
 
@@ -252,7 +265,6 @@ service:
 
 config:
   logLevel: INFO
-  demoMode: "false"
   hubbleEnabled: "true"
   hubbleRelayAddr: hubble-relay.kube-system.svc.cluster.local:4245
   idleTimeoutSeconds: "5"

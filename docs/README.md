@@ -10,4 +10,4 @@
 | [Discovery Modes](discovery-modes.md) | sysfs vs hubble comparison |
 | [Hubble Integration](hubble-integration.md) | Cilium Hubble integration guide |
 | [Agent Architecture](agent-architecture.md) | Internal agent architecture |
-| [Demo Scripts](../demo/README.md) | Demo topology and traffic simulation |
+| [Demo Scripts](../demo/README.md) | Traffic scripts for Clabernetes topology |

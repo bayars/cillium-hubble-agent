@@ -16,6 +16,9 @@
 | GET | `/api/links/{id}` | Single link details |
 | PUT | `/api/links/{id}/state?state=X` | Update link state |
 | PUT | `/api/links/{id}/metrics` | Update link metrics |
+| PUT | `/api/interfaces` | Push per-interface metrics (node_id in body) |
+| GET | `/api/interfaces?node_id=X` | Get interface metrics for a node |
+| GET | `/api/interfaces/all` | Get interface metrics for all nodes |
 | POST | `/api/events` | Submit link state event |
 | GET | `/api/events/history` | Event history |
 | WS | `/ws/events` | Stream events to clients |
@@ -87,6 +90,79 @@ Example events:
   "mtu": 1500,
   "last_updated": "2026-01-01T19:50:23.456789",
   "metadata": {}
+}
+```
+
+## Interface Metrics
+
+### Push Interface Metrics
+
+```bash
+curl -X PUT "http://<SERVICE_URL>/api/interfaces" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_id": "spine1",
+    "interfaces": [
+      {
+        "name": "ethernet-1/1",
+        "state": "up",
+        "rx_bps": 5000000.0,
+        "tx_bps": 1200000.0,
+        "rx_pps": 4000.0,
+        "tx_pps": 1000.0,
+        "rx_bytes_total": 500000000,
+        "tx_bytes_total": 120000000,
+        "rx_packets_total": 400000,
+        "tx_packets_total": 100000,
+        "rx_errors": 0,
+        "tx_errors": 0,
+        "rx_dropped": 0,
+        "tx_dropped": 0
+      }
+    ],
+    "poll_interval_ms": 2000,
+    "data_source": "sysfs"
+  }'
+```
+
+### Get Node Interfaces
+
+```bash
+curl -s "http://<SERVICE_URL>/api/interfaces?node_id=spine1" | jq '.interfaces[]'
+```
+
+### Get All Interfaces
+
+```bash
+curl -s http://<SERVICE_URL>/api/interfaces/all | jq '.[].node_id'
+```
+
+### Interface Response Schema
+
+```json
+{
+  "node_id": "spine1",
+  "node_label": "SPINE1",
+  "interfaces": [
+    {
+      "name": "ethernet-1/1",
+      "state": "up",
+      "rx_bps": 5000000.0,
+      "tx_bps": 1200000.0,
+      "rx_pps": 4000.0,
+      "tx_pps": 1000.0,
+      "rx_bytes_total": 500000000,
+      "tx_bytes_total": 120000000,
+      "rx_packets_total": 400000,
+      "tx_packets_total": 100000,
+      "rx_errors": 0,
+      "tx_errors": 0,
+      "rx_dropped": 0,
+      "tx_dropped": 0
+    }
+  ],
+  "count": 1,
+  "timestamp": "2026-01-01T19:50:23.456789"
 }
 ```
 
