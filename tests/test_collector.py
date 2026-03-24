@@ -12,17 +12,15 @@ Tests cover:
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-import subprocess
 import pytest
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from sidecar.collector import (
     read_proc_net_dev,
-    compute_rates,
     get_pods,
-    push_metrics,
 )
+from sidecar.common import compute_rates, push_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +223,7 @@ def test_push_metrics_payload():
 
     interfaces = [{"name": "eth0", "rx_bps": 100}]
 
-    with patch("sidecar.collector.urlopen", mock_urlopen):
+    with patch("sidecar.common.urlopen", mock_urlopen):
         push_metrics("http://api:8000", "clab/pod1", interfaces, 2000)
 
     assert captured["url"] == "http://api:8000/api/interfaces"
@@ -237,7 +235,7 @@ def test_push_metrics_handles_error():
     """URLError is caught gracefully."""
     from urllib.error import URLError
 
-    with patch("sidecar.collector.urlopen", side_effect=URLError("refused")):
+    with patch("sidecar.common.urlopen", side_effect=URLError("refused")):
         push_metrics("http://api:8000", "clab/pod1", [], 2000)
 
 

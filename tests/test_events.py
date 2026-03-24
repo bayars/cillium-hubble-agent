@@ -1,38 +1,15 @@
 import pytest
 from httpx import AsyncClient
 
+from .helpers import create_node, create_link
+
 
 @pytest.mark.asyncio
 async def test_post_event(client: AsyncClient):
     """Test posting an event."""
-    # Add topology first
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r2",
-            "label": "R2",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": "link1",
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth0",
-            "target_interface": "eth0",
-            "state": "idle",
-        },
-    )
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     event = {
         "interface": "eth0",

@@ -6,20 +6,13 @@ import pytest
 from httpx import AsyncClient
 
 from api.models.schemas import InterfaceMetrics, InterfaceState
-
-
-async def _create_node(client: AsyncClient, node_id: str = "spine1"):
-    """Helper: create a node."""
-    await client.post(
-        "/api/topology/nodes",
-        json={"id": node_id, "label": node_id.upper(), "type": "router"},
-    )
+from .helpers import create_node
 
 
 @pytest.mark.asyncio
 async def test_push_interface_metrics(client: AsyncClient):
     """Collector pushes interface metrics for a node."""
-    await _create_node(client, "spine1")
+    await create_node(client, "spine1")
 
     payload = {
         "node_id": "spine1",
@@ -69,7 +62,7 @@ async def test_push_interface_metrics(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_node_interfaces(client: AsyncClient):
     """GET returns all pushed interfaces."""
-    await _create_node(client, "leaf1")
+    await create_node(client, "leaf1")
 
     payload = {
         "node_id": "leaf1",
@@ -93,7 +86,7 @@ async def test_get_node_interfaces(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_push_updates_existing(client: AsyncClient):
     """Subsequent pushes update existing interface metrics."""
-    await _create_node(client, "sw1")
+    await create_node(client, "sw1")
 
     payload1 = {
         "node_id": "sw1",
@@ -133,7 +126,7 @@ async def test_get_interfaces_nonexistent_node(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_interface_with_errors_and_drops(client: AsyncClient):
     """Interface error and drop counters are stored."""
-    await _create_node(client, "r3")
+    await create_node(client, "r3")
 
     payload = {
         "node_id": "r3",
@@ -160,8 +153,8 @@ async def test_interface_with_errors_and_drops(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_all_interfaces(client: AsyncClient):
     """GET /api/interfaces/all returns all nodes with interfaces."""
-    await _create_node(client, "n1")
-    await _create_node(client, "n2")
+    await create_node(client, "n1")
+    await create_node(client, "n2")
 
     await client.put("/api/interfaces", json={
         "node_id": "n1",

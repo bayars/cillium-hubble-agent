@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from .helpers import create_node, create_link
+
 
 @pytest.mark.asyncio
 async def test_get_empty_topology(client: AsyncClient):
@@ -15,14 +17,7 @@ async def test_get_empty_topology(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_add_node(client: AsyncClient):
     """Test adding a node."""
-    node = {
-        "id": "router1",
-        "label": "R1",
-        "type": "router",
-        "status": "up",
-        "platform": "srlinux",
-    }
-    response = await client.post("/api/topology/nodes", json=node)
+    response = await create_node(client, "router1", "R1", status="up", platform="srlinux")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "router1"
@@ -32,34 +27,12 @@ async def test_add_node(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_add_link(client: AsyncClient):
     """Test adding a link."""
-    # Add nodes first
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "router1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "router2",
-            "label": "R2",
-            "type": "router",
-        },
-    )
+    await create_node(client, "router1", "R1")
+    await create_node(client, "router2", "R2")
 
-    link = {
-        "id": "link1",
-        "source": "router1",
-        "target": "router2",
-        "source_interface": "eth1",
-        "target_interface": "eth1",
-        "state": "active",
-        "speed_mbps": 10000,
-    }
-    response = await client.post("/api/topology/links", json=link)
+    response = await create_link(
+        client, "link1", "router1", "router2", "eth1", "eth1", "active", speed_mbps=10000
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "link1"
@@ -69,32 +42,9 @@ async def test_add_link(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_topology_contains_added_items(client: AsyncClient):
     """Test topology returns added nodes and links."""
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r2",
-            "label": "R2",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": "link1",
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth0",
-            "target_interface": "eth0",
-        },
-    )
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     response = await client.get("/api/topology")
     assert response.status_code == 200
@@ -106,14 +56,7 @@ async def test_topology_contains_added_items(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_remove_node(client: AsyncClient):
     """Test removing a node."""
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
+    await create_node(client, "r1")
 
     response = await client.delete("/api/topology/nodes/r1")
     assert response.status_code == 200
@@ -125,32 +68,9 @@ async def test_remove_node(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_remove_link(client: AsyncClient):
     """Test removing a link."""
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r2",
-            "label": "R2",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": "link1",
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth0",
-            "target_interface": "eth0",
-        },
-    )
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     response = await client.delete("/api/topology/links/link1")
     assert response.status_code == 200

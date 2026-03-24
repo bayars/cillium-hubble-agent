@@ -1,55 +1,13 @@
 import pytest
 from httpx import AsyncClient
 
-
-async def _seed_topology(client: AsyncClient):
-    """Helper to create a basic topology."""
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r1",
-            "label": "R1",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={
-            "id": "r2",
-            "label": "R2",
-            "type": "router",
-        },
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": "link1",
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth0",
-            "target_interface": "eth0",
-            "state": "active",
-            "speed_mbps": 1000,
-        },
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": "link2",
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth1",
-            "target_interface": "eth1",
-            "state": "idle",
-            "speed_mbps": 10000,
-        },
-    )
+from .helpers import seed_topology
 
 
 @pytest.mark.asyncio
 async def test_get_all_links(client: AsyncClient):
     """Test getting all links."""
-    await _seed_topology(client)
+    await seed_topology(client)
 
     response = await client.get("/api/links")
     assert response.status_code == 200
@@ -60,7 +18,7 @@ async def test_get_all_links(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_filter_links_by_state(client: AsyncClient):
     """Test filtering links by state."""
-    await _seed_topology(client)
+    await seed_topology(client)
 
     response = await client.get("/api/links?state=active")
     assert response.status_code == 200
@@ -72,7 +30,7 @@ async def test_filter_links_by_state(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_single_link(client: AsyncClient):
     """Test getting a single link by ID."""
-    await _seed_topology(client)
+    await seed_topology(client)
 
     response = await client.get("/api/links/link1")
     assert response.status_code == 200
@@ -92,7 +50,7 @@ async def test_get_nonexistent_link(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_link_state(client: AsyncClient):
     """Test updating link state."""
-    await _seed_topology(client)
+    await seed_topology(client)
 
     response = await client.put("/api/links/link1/state?state=down")
     assert response.status_code == 200
@@ -105,7 +63,7 @@ async def test_update_link_state(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_link_metrics(client: AsyncClient):
     """Test updating link metrics."""
-    await _seed_topology(client)
+    await seed_topology(client)
 
     metrics = {
         "rx_bps": 100000000,

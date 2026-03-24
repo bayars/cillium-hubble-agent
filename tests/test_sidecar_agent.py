@@ -24,9 +24,8 @@ from sidecar.agent import (
     read_counter,
     get_operstate,
     read_all_counters,
-    compute_rates,
-    push_metrics,
 )
+from sidecar.common import compute_rates, push_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +370,7 @@ def test_push_metrics_success():
 
     interfaces = [{"name": "eth0", "rx_bps": 1000, "tx_bps": 500}]
 
-    with patch("sidecar.agent.urlopen", mock_urlopen):
+    with patch("sidecar.common.urlopen", mock_urlopen):
         push_metrics("http://api:8000", "clab/spine1", interfaces, 2000)
 
     assert captured["url"] == "http://api:8000/api/interfaces"
@@ -389,7 +388,7 @@ def test_push_metrics_api_error():
     def mock_urlopen(req, timeout=None):
         raise URLError("Connection refused")
 
-    with patch("sidecar.agent.urlopen", mock_urlopen):
+    with patch("sidecar.common.urlopen", mock_urlopen):
         # Should not raise
         push_metrics("http://api:8000", "clab/spine1", [], 2000)
 

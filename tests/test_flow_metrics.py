@@ -11,35 +11,15 @@ import pytest
 from httpx import AsyncClient
 
 from api.models.schemas import LinkMetrics
-
-
-async def _create_link(client: AsyncClient, link_id: str = "link1"):
-    """Helper: create nodes and a link."""
-    await client.post(
-        "/api/topology/nodes",
-        json={"id": "r1", "label": "R1", "type": "router"},
-    )
-    await client.post(
-        "/api/topology/nodes",
-        json={"id": "r2", "label": "R2", "type": "router"},
-    )
-    await client.post(
-        "/api/topology/links",
-        json={
-            "id": link_id,
-            "source": "r1",
-            "target": "r2",
-            "source_interface": "eth0",
-            "target_interface": "eth0",
-            "state": "idle",
-        },
-    )
+from .helpers import create_node, create_link
 
 
 @pytest.mark.asyncio
 async def test_link_metrics_default_data_source(client: AsyncClient):
     """New links should have data_source='none' by default."""
-    await _create_link(client)
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     response = await client.get("/api/links/link1")
     assert response.status_code == 200
@@ -52,7 +32,9 @@ async def test_link_metrics_default_data_source(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_push_hubble_flow_metrics(client: AsyncClient):
     """Push Hubble-style flow metrics (no bandwidth)."""
-    await _create_link(client)
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     metrics = {
         "flow_count": 1523,
@@ -85,7 +67,9 @@ async def test_push_hubble_flow_metrics(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_push_iperf3_metrics(client: AsyncClient):
     """Push real iperf3 measured bandwidth."""
-    await _create_link(client)
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     metrics = {
         "rx_bps": 12500000,
@@ -106,7 +90,9 @@ async def test_push_iperf3_metrics(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_metrics_data_source_persists(client: AsyncClient):
     """Verify data_source persists across reads."""
-    await _create_link(client)
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     await client.put(
         "/api/links/link1/metrics",
@@ -125,7 +111,9 @@ async def test_metrics_data_source_persists(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_links_list_includes_flow_metrics(client: AsyncClient):
     """GET /api/links returns flow metrics in the response."""
-    await _create_link(client)
+    await create_node(client, "r1")
+    await create_node(client, "r2")
+    await create_link(client, "link1")
 
     await client.put(
         "/api/links/link1/metrics",
