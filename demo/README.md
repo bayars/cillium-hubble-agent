@@ -10,13 +10,13 @@ See the main [README.md](../README.md) for full documentation.
 # Set API URL (Gateway LoadBalancer IP)
 export API_URL=http://10.0.0.108
 
-# Setup the demo topology (nodes + links)
-./setup-topology.sh $API_URL --clear
-
-# Run traffic simulation
+# Run real iperf3 traffic (requires Clabernetes pods)
 ./start-traffic.sh 100 30
 
-# View live dashboard
+# Or continuous real traffic
+./continuous-traffic.sh 200
+
+# View live dashboard (auto-refresh every 2s)
 ./dashboard.sh $API_URL 2
 ```
 
@@ -31,7 +31,7 @@ export API_URL=http://10.0.0.108
            ┌───────────┘       └───────────┐
            │                               │
       ┌────┴────┐                     ┌────┴────┐
-      │  leaf1  │◄───────────────────►│  leaf2  │
+      │  leaf1  │                     │  leaf2  │
       │  (FRR)  │                     │  (FRR)  │
       └────┬────┘                     └────┬────┘
            │                               │
@@ -45,27 +45,64 @@ export API_URL=http://10.0.0.108
 
 | Script | Description |
 |--------|-------------|
-| `setup-topology.sh [url] [--clear]` | Create demo topology (nodes + links) |
-| `start-traffic.sh [mbps] [seconds]` | Simulate traffic with progress bar |
-| `dashboard.sh [url] [refresh]` | Visual bandwidth dashboard |
-| `show-bandwidth.sh [url]` | Simple bandwidth table |
-| `continuous-traffic.sh [mbps]` | Continuous iperf3 traffic |
+| `start-traffic.sh [mbps] [seconds]` | Run iperf3 traffic, report real measurements |
+| `continuous-traffic.sh [mbps]` | Continuous iperf3 with live metric updates |
+| `traffic.sh [lab] [mbps] [seconds]` | Lab-aware traffic generator |
+| `dashboard.sh [url] [refresh]` | Live dashboard with data source attribution |
+| `show-bandwidth.sh [url]` | Simple metrics table |
+| `list-labs.sh [url]` | List deployed labs |
 
-### Setup Topology
+## Data Sources
 
-The `setup-topology.sh` script creates the demo topology in the Network Monitor API:
+The dashboard shows a **SOURCE** column so you always know where metrics came from:
 
-```bash
-# Create topology (skips existing nodes/links)
-./setup-topology.sh http://10.0.0.108
+| Source | What it means |
+|--------|---------------|
+| `hubble` | Real Hubble flow data (flow counts, NOT bandwidth) |
+| `iperf3` | Real measured throughput from iperf3 between pods |
+| `sysfs` | Real kernel interface counters |
+| `external` | External collector (gNMI, SNMP, Prometheus) |
 
-# Clear existing and recreate
-./setup-topology.sh http://10.0.0.108 --clear
+Scripts require real tgen pods to be available and will exit with an error if not found.
+
+## Interface Metrics
+
+The sidecar agent is injected into every Clabernetes topology pod via `extraContainers`. It reads kernel counters directly and captures **all traffic** — ping, ssh, scp, routing protocols, iperf3 — on every interface (linecards, CPM, mgmt).
+
+### Setup (in Clabernetes Helm values)
+
+```yaml
+globalConfig:
+  deployment:
+    extraContainers:
+      - name: netmon-sidecar
+        image: ghcr.io/bayars/netmon-sidecar:latest
+        env:
+          - name: API_URL
+            value: "http://network-monitor.network-monitor.svc:8000"
+          - name: POLL_INTERVAL_MS
+            value: "2000"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
 ```
 
-This creates:
-- **Nodes**: spine1, leaf1, leaf2, tgen1, tgen2
-- **Links**: leaf1-tgen1, spine1-leaf1, spine1-leaf2, leaf2-tgen2
+### View metrics
+
+```bash
+# View all nodes with interface metrics
+curl -s http://$API_URL/api/interfaces/all | jq '.[].node_id'
+
+# View interfaces for a specific node
+curl -s "http://$API_URL/api/interfaces?node_id=<NODE_ID>" | jq '.interfaces[] | {name, state, rx_bps, tx_bps}'
+```
+
+Configure the collection interval via `POLL_INTERVAL_MS` (default: 2000ms). Set to `500` for near-real-time updates.
 
 ## Deploy Clabernetes Topology
 
