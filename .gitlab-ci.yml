@@ -21,7 +21,7 @@ lint:
     - pip install uv
     - uv sync --dev
   script:
-    - uv run ruff check api/ sidecar/ tests/
+    - uv run ruff check api/ sidecar/ tests/ --exclude api/generated/
 
 test:
   stage: test
@@ -63,6 +63,8 @@ helm-lint:
     - docker:27-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_MERGE_REQUEST_ID
@@ -71,6 +73,7 @@ build-api:
   extends: .docker-base
   script:
     - docker build -t ${API_IMAGE}:${CI_COMMIT_SHORT_SHA} .
+    - docker push ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
 
 build-sidecar:
   extends: .docker-base
@@ -78,6 +81,7 @@ build-sidecar:
     - docker build
       -t ${SIDECAR_IMAGE}:${CI_COMMIT_SHORT_SHA}
       -f sidecar/Dockerfile .
+    - docker push ${SIDECAR_IMAGE}:${CI_COMMIT_SHORT_SHA}
 
 build-collector:
   extends: .docker-base
@@ -85,9 +89,10 @@ build-collector:
     - docker build
       -t ${COLLECTOR_IMAGE}:${CI_COMMIT_SHORT_SHA}
       -f sidecar/Dockerfile.collector .
+    - docker push ${COLLECTOR_IMAGE}:${CI_COMMIT_SHORT_SHA}
 
 # ---------------------------------------------------------------------------
-# Release Stage (only on tags)
+# Release Stage (only on tags matching vX.Y.Z)
 # ---------------------------------------------------------------------------
 
 .release-docker:
