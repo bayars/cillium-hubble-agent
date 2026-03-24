@@ -11,7 +11,7 @@ See the main [README.md](../README.md) for full documentation.
 export API_URL=http://10.0.0.108
 
 # Run real iperf3 traffic (requires Clabernetes pods)
-./start-traffic.sh 100 30
+./traffic.sh network-monitor-demo 100 30
 
 # Or continuous real traffic
 ./continuous-traffic.sh 200
@@ -45,9 +45,8 @@ export API_URL=http://10.0.0.108
 
 | Script | Description |
 |--------|-------------|
-| `start-traffic.sh [mbps] [seconds]` | Run iperf3 traffic, report real measurements |
+| `traffic.sh [lab] [mbps] [seconds]` | Lab-aware iperf3 traffic generator |
 | `continuous-traffic.sh [mbps]` | Continuous iperf3 with live metric updates |
-| `traffic.sh [lab] [mbps] [seconds]` | Lab-aware traffic generator |
 | `dashboard.sh [url] [refresh]` | Live dashboard with data source attribution |
 | `show-bandwidth.sh [url]` | Simple metrics table |
 | `list-labs.sh [url]` | List deployed labs |
