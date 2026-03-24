@@ -83,15 +83,18 @@ spec:
           env:
             - name: LOG_LEVEL
               value: "INFO"
-            - name: DEMO_MODE
-              value: "false"
             # Hubble integration
             - name: HUBBLE_ENABLED
               value: "true"
+            # GKE default: hubble-relay.kube-system.svc.cluster.local:4245
+            # Override if your cluster uses a different namespace or service name
             - name: HUBBLE_RELAY_ADDR
               value: "hubble-relay.kube-system.svc.cluster.local:4245"
             - name: IDLE_TIMEOUT_SECONDS
               value: "5"
+            # Set to "true" if Hubble Relay requires TLS (some GKE configurations)
+            - name: HUBBLE_TLS
+              value: "false"
           resources:
             requests:
               cpu: 100m

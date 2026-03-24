@@ -50,14 +50,18 @@ spec:
           env:
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
-            - name: DEMO_MODE
-              value: {{ .Values.config.demoMode | quote }}
             - name: HUBBLE_ENABLED
               value: {{ .Values.config.hubbleEnabled | quote }}
             - name: HUBBLE_RELAY_ADDR
               value: {{ .Values.config.hubbleRelayAddr | quote }}
+            - name: HUBBLE_TLS
+              value: {{ .Values.config.hubbleTls | quote }}
             - name: IDLE_TIMEOUT_SECONDS
               value: {{ .Values.config.idleTimeoutSeconds | quote }}
+            {{- if .Values.config.namespaceFilter }}
+            - name: NAMESPACE_FILTER
+              value: {{ .Values.config.namespaceFilter | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:

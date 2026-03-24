@@ -17,9 +17,6 @@ data:
   # Logging level
   LOG_LEVEL: "INFO"
 
-  # Demo mode (initialize with demo topology)
-  DEMO_MODE: "false"
-
   # Optional: Namespace filter (comma-separated)
   # NAMESPACE_FILTER: "default,production"
 

@@ -88,10 +88,37 @@ resources:
 # Application configuration
 config:
   logLevel: INFO
-  demoMode: "false"
   hubbleEnabled: "true"
   hubbleRelayAddr: hubble-relay.kube-system.svc.cluster.local:4245
+  hubbleTls: "false"
   idleTimeoutSeconds: "5"
+  namespaceFilter: ""
+
+# Interface metrics collector
+# Reads /proc/net/dev from containerlab pods via kubectl exec
+# Captures ALL traffic (ping, ssh, scp, routing protocols, etc.)
+collector:
+  enabled: false
+  image:
+    repository: ghcr.io/bayars/netmon-collector
+    tag: latest
+    pullPolicy: IfNotPresent
+  # Polling interval in milliseconds — controls how often interface counters are read
+  pollIntervalMs: 2000
+  # Namespace where containerlab pods run
+  namespace: clab
+  # Label selector for target pods
+  podSelector: "clabernetes/app=clabernetes"
+  # Comma-separated interface names to exclude from collection
+  excludeInterfaces: "lo"
+  logLevel: INFO
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
 
 # Probes
 livenessProbe:
