@@ -5,7 +5,6 @@ Interface metrics API routes - Per-interface rx/tx counters from sidecar agents.
 from fastapi import APIRouter, HTTPException, Query
 
 from ..models.schemas import (
-    InterfaceMetrics,
     InterfaceMetricsPush,
     NodeInterfacesResponse,
 )

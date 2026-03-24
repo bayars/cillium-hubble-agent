@@ -186,8 +186,6 @@ class HubbleService:
                     # Update link metrics with real Hubble flow data
                     link_metrics = self._flow_metrics_to_link_metrics(change.metrics)
                     if link_metrics:
-                        service = get_link_state_service()
-                        # Try to find a matching link for this flow
                         await self._update_link_for_flow(
                             change.flow_key, change.new_state.value, link_metrics
                         )

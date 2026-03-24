@@ -31,7 +31,7 @@ except ImportError:
 
 # Import generated Hubble proto stubs
 try:
-    import api.generated  # triggers sys.path setup for generated imports
+    import api.generated  # noqa: F401 — side-effect import for sys.path setup
     from observer import observer_pb2, observer_pb2_grpc
     from flow import flow_pb2
 
