@@ -28,9 +28,11 @@ import os
 import sys
 import time
 from pathlib import Path
-from urllib.request import Request, urlopen
-from urllib.error import URLError
-import json
+
+try:
+    from .common import compute_rates, push_metrics
+except ImportError:
+    from common import compute_rates, push_metrics
 
 logging.basicConfig(
     level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper()),
@@ -40,12 +42,6 @@ logging.basicConfig(
 logger = logging.getLogger("sidecar")
 
 SYSFS_NET = Path("/sys/class/net")
-
-# Counters we read from sysfs
-BYTE_COUNTERS = ("rx_bytes", "tx_bytes")
-PACKET_COUNTERS = ("rx_packets", "tx_packets")
-ERROR_COUNTERS = ("rx_errors", "tx_errors")
-DROP_COUNTERS = ("rx_dropped", "tx_dropped")
 
 
 def read_counter(iface_path: Path, counter: str) -> int:
@@ -94,61 +90,6 @@ def read_all_counters(interfaces: list[str]) -> dict:
             "operstate": get_operstate(iface_path),
         }
     return result
-
-
-def compute_rates(prev: dict, curr: dict, interval_s: float) -> list[dict]:
-    """Compute per-interface rates from two counter snapshots."""
-    metrics = []
-    for iface, counters in curr.items():
-        entry = {
-            "name": iface,
-            "state": counters["operstate"],
-            "rx_bytes_total": counters["rx_bytes"],
-            "tx_bytes_total": counters["tx_bytes"],
-            "rx_packets_total": counters["rx_packets"],
-            "tx_packets_total": counters["tx_packets"],
-            "rx_errors": counters["rx_errors"],
-            "tx_errors": counters["tx_errors"],
-            "rx_dropped": counters["rx_dropped"],
-            "tx_dropped": counters["tx_dropped"],
-            "rx_bps": 0.0,
-            "tx_bps": 0.0,
-            "rx_pps": 0.0,
-            "tx_pps": 0.0,
-        }
-
-        if iface in prev and interval_s > 0:
-            p = prev[iface]
-            entry["rx_bps"] = max(0, (counters["rx_bytes"] - p["rx_bytes"])) / interval_s
-            entry["tx_bps"] = max(0, (counters["tx_bytes"] - p["tx_bytes"])) / interval_s
-            entry["rx_pps"] = max(0, (counters["rx_packets"] - p["rx_packets"])) / interval_s
-            entry["tx_pps"] = max(0, (counters["tx_packets"] - p["tx_packets"])) / interval_s
-
-        metrics.append(entry)
-    return metrics
-
-
-def push_metrics(api_url: str, node_id: str, interfaces: list[dict], poll_interval_ms: int):
-    """Push interface metrics to the network-monitor API."""
-    url = f"{api_url}/api/interfaces"
-    payload = json.dumps({
-        "node_id": node_id,
-        "interfaces": interfaces,
-        "poll_interval_ms": poll_interval_ms,
-        "data_source": "sysfs",
-    }).encode()
-
-    req = Request(url, data=payload, method="PUT")
-    req.add_header("Content-Type", "application/json")
-
-    try:
-        with urlopen(req, timeout=5) as resp:
-            if resp.status == 200:
-                logger.debug(f"Pushed {len(interfaces)} interfaces to {url}")
-            else:
-                logger.warning(f"API returned {resp.status}")
-    except URLError as e:
-        logger.warning(f"Failed to push metrics: {e}")
 
 
 def main():
