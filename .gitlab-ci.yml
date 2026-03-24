@@ -6,6 +6,9 @@ stages:
 variables:
   PYTHON_VERSION: "3.11"
   HELM_VERSION: "3.14.0"
+  API_IMAGE: ${CI_REGISTRY_IMAGE}
+  SIDECAR_IMAGE: ${CI_REGISTRY_IMAGE}/sidecar
+  COLLECTOR_IMAGE: ${CI_REGISTRY_IMAGE}/collector
 
 # ---------------------------------------------------------------------------
 # Test Stage
@@ -18,7 +21,7 @@ lint:
     - pip install uv
     - uv sync --dev
   script:
-    - uv run ruff check api/ tests/
+    - uv run ruff check api/ sidecar/ tests/
 
 test:
   stage: test
@@ -28,6 +31,13 @@ test:
     - uv sync --dev
   script:
     - uv run pytest tests/ -v --tb=short
+      --ignore=tests/test_e2e.py
+      --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    expire_in: 30 days
 
 helm-lint:
   stage: test
@@ -37,50 +47,99 @@ helm-lint:
   script:
     - helm lint helm/network-monitor
     - helm template test helm/network-monitor --namespace test
+    - helm template test helm/network-monitor
+      --namespace test
+      --set collector.enabled=true
+      --set collector.pollIntervalMs=1000
 
 # ---------------------------------------------------------------------------
 # Build Stage
 # ---------------------------------------------------------------------------
 
-docker-build:
+.docker-base:
   stage: build
   image: docker:27
   services:
     - docker:27-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-  script:
-    - docker build -t network-monitor:${CI_COMMIT_SHORT_SHA} .
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_MERGE_REQUEST_ID
+
+build-api:
+  extends: .docker-base
+  script:
+    - docker build -t ${API_IMAGE}:${CI_COMMIT_SHORT_SHA} .
+
+build-sidecar:
+  extends: .docker-base
+  script:
+    - docker build
+      -t ${SIDECAR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      -f sidecar/Dockerfile .
+
+build-collector:
+  extends: .docker-base
+  script:
+    - docker build
+      -t ${COLLECTOR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      -f sidecar/Dockerfile.collector .
 
 # ---------------------------------------------------------------------------
 # Release Stage (only on tags)
 # ---------------------------------------------------------------------------
 
-docker-push:
+.release-docker:
   stage: release
   image: docker:27
   services:
     - docker:27-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-    IMAGE_TAG: ${CI_REGISTRY_IMAGE}
   before_script:
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+push-api:
+  extends: .release-docker
   script:
     - VERSION=${CI_COMMIT_TAG#v}
     - docker build
-      -t ${IMAGE_TAG}:${VERSION}
-      -t ${IMAGE_TAG}:${CI_COMMIT_SHORT_SHA}
-      -t ${IMAGE_TAG}:latest
+      -t ${API_IMAGE}:${VERSION}
+      -t ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      -t ${API_IMAGE}:latest
       .
-    - docker push ${IMAGE_TAG}:${VERSION}
-    - docker push ${IMAGE_TAG}:${CI_COMMIT_SHORT_SHA}
-    - docker push ${IMAGE_TAG}:latest
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - docker push ${API_IMAGE}:${VERSION}
+    - docker push ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${API_IMAGE}:latest
+
+push-sidecar:
+  extends: .release-docker
+  script:
+    - VERSION=${CI_COMMIT_TAG#v}
+    - docker build
+      -t ${SIDECAR_IMAGE}:${VERSION}
+      -t ${SIDECAR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      -t ${SIDECAR_IMAGE}:latest
+      -f sidecar/Dockerfile .
+    - docker push ${SIDECAR_IMAGE}:${VERSION}
+    - docker push ${SIDECAR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${SIDECAR_IMAGE}:latest
+
+push-collector:
+  extends: .release-docker
+  script:
+    - VERSION=${CI_COMMIT_TAG#v}
+    - docker build
+      -t ${COLLECTOR_IMAGE}:${VERSION}
+      -t ${COLLECTOR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      -t ${COLLECTOR_IMAGE}:latest
+      -f sidecar/Dockerfile.collector .
+    - docker push ${COLLECTOR_IMAGE}:${VERSION}
+    - docker push ${COLLECTOR_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${COLLECTOR_IMAGE}:latest
 
 helm-push:
   stage: release
@@ -101,7 +160,9 @@ release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
-    - docker-push
+    - push-api
+    - push-sidecar
+    - push-collector
     - helm-push
   script:
     - echo "Creating release for ${CI_COMMIT_TAG}"

@@ -16,10 +16,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .models.schemas import (
-    HealthResponse, ErrorResponse, Node, Link, LinkState, NodeStatus,
-)
-from .routes import topology as topology, links as links, websocket as websocket, events as events, labs as labs
+from .models.schemas import HealthResponse, ErrorResponse
+from .routes import topology as topology, links as links, websocket as websocket, events as events, labs as labs, interfaces as interfaces
 from .services.link_state_service import get_link_state_service
 
 logger = logging.getLogger(__name__)
@@ -38,71 +36,11 @@ def setup_logging():
     )
 
 
-async def initialize_demo_topology():
-    """Initialize with demo topology for testing."""
-    service = get_link_state_service()
-
-    # Demo nodes
-    nodes = [
-        Node(id="router1", label="R1", type="router", status=NodeStatus.UP, platform="srlinux"),
-        Node(id="router2", label="R2", type="router", status=NodeStatus.UP, platform="ceos"),
-        Node(id="router3", label="R3", type="router", status=NodeStatus.UP, platform="frr"),
-        Node(id="switch1", label="SW1", type="switch", status=NodeStatus.UP),
-    ]
-
-    # Demo links
-    demo_links = [
-        Link(
-            id="link1",
-            source="router1",
-            target="router2",
-            source_interface="ethernet-1/1",
-            target_interface="Ethernet1",
-            state=LinkState.ACTIVE,
-            speed_mbps=10000,
-        ),
-        Link(
-            id="link2",
-            source="router2",
-            target="router3",
-            source_interface="Ethernet2",
-            target_interface="eth0",
-            state=LinkState.IDLE,
-            speed_mbps=1000,
-        ),
-        Link(
-            id="link3",
-            source="router3",
-            target="switch1",
-            source_interface="eth1",
-            target_interface="eth1",
-            state=LinkState.ACTIVE,
-            speed_mbps=1000,
-        ),
-        Link(
-            id="link4",
-            source="switch1",
-            target="router1",
-            source_interface="eth2",
-            target_interface="ethernet-1/2",
-            state=LinkState.DOWN,
-            speed_mbps=10000,
-        ),
-    ]
-
-    await service.initialize_topology(nodes, demo_links)
-    logger.info("Demo topology initialized")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     setup_logging()
     logger.info("Starting Network Monitor API...")
-
-    # Initialize demo topology if enabled
-    if os.environ.get("DEMO_MODE", "true").lower() == "true":
-        await initialize_demo_topology()
 
     # Start Hubble integration if enabled
     hubble_enabled = os.environ.get("HUBBLE_ENABLED", "false").lower() == "true"
@@ -164,6 +102,7 @@ app.include_router(topology.router, prefix="/api")
 app.include_router(links.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(labs.router, prefix="/api")
+app.include_router(interfaces.router, prefix="/api")
 app.include_router(websocket.router)
 
 

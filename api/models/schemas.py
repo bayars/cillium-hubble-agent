@@ -33,30 +33,50 @@ class NodeStatus(str, Enum):
 
 
 class LinkMetrics(BaseModel):
-    """Traffic metrics for a link."""
+    """
+    Traffic metrics for a link.
 
-    rx_bps: float = Field(0.0, description="Receive bytes per second")
-    tx_bps: float = Field(0.0, description="Transmit bytes per second")
-    rx_pps: float = Field(0.0, description="Receive packets per second")
-    tx_pps: float = Field(0.0, description="Transmit packets per second")
+    NOTE on data sources:
+    - Hubble mode: Only flow_count, flows_per_second, flows_forwarded,
+      flows_dropped, and protocols are populated from real Hubble data.
+      Hubble does NOT provide byte-rate or bandwidth data.
+    - sysfs mode: rx_bps, tx_bps, rx_pps, tx_pps come from kernel counters.
+    - External push: Any field can be set via PUT /api/links/{id}/metrics
+      by external tools (e.g., gNMI collectors, SNMP pollers).
+    """
+
+    # Byte-rate metrics (from sysfs/kernel counters or external push, NOT from Hubble)
+    rx_bps: float = Field(0.0, description="Receive bytes per second (sysfs/external only)")
+    tx_bps: float = Field(0.0, description="Transmit bytes per second (sysfs/external only)")
+    rx_pps: float = Field(0.0, description="Receive packets per second (sysfs/external only)")
+    tx_pps: float = Field(0.0, description="Transmit packets per second (sysfs/external only)")
     rx_bytes_total: int = Field(0, description="Total bytes received")
     tx_bytes_total: int = Field(0, description="Total bytes transmitted")
-    utilization: float = Field(0.0, ge=0, le=1, description="Link utilization (0-1)")
+    utilization: float = Field(0.0, ge=0, le=1, description="Link utilization 0-1 (sysfs/external only)")
     latency_ms: Optional[float] = Field(None, description="Link latency in ms")
     packet_loss: Optional[float] = Field(None, description="Packet loss percentage")
+
+    # Flow-based metrics (from Hubble)
+    flow_count: int = Field(0, description="Total flow events observed (Hubble)")
+    flows_per_second: float = Field(0.0, description="Flow event rate (Hubble)")
+    flows_forwarded: int = Field(0, description="Flows with FORWARDED verdict (Hubble)")
+    flows_dropped: int = Field(0, description="Flows with DROPPED verdict (Hubble)")
+    active_connections: int = Field(0, description="Currently active connections (Hubble)")
+    protocols: dict = Field(default_factory=dict, description="Protocol breakdown {TCP: N, UDP: M} (Hubble)")
+    data_source: str = Field("none", description="Source of metrics: hubble, sysfs, iperf3, external")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "rx_bps": 1250000.0,
-                "tx_bps": 980000.0,
-                "rx_pps": 1000.0,
-                "tx_pps": 800.0,
-                "rx_bytes_total": 1234567890,
-                "tx_bytes_total": 987654321,
-                "utilization": 0.45,
-                "latency_ms": 2.5,
-                "packet_loss": 0.01,
+                "rx_bps": 0.0,
+                "tx_bps": 0.0,
+                "flow_count": 1523,
+                "flows_per_second": 42.5,
+                "flows_forwarded": 1500,
+                "flows_dropped": 23,
+                "active_connections": 8,
+                "protocols": {"TCP": 1200, "UDP": 323},
+                "data_source": "hubble",
             }
         }
 
@@ -244,6 +264,58 @@ class ErrorResponse(BaseModel):
 # ============================================================================
 # Lab Management Models
 # ============================================================================
+
+
+# ============================================================================
+# Interface Metrics Models (sidecar agent)
+# ============================================================================
+
+
+class InterfaceState(str, Enum):
+    """Interface operational state."""
+
+    UP = "up"
+    DOWN = "down"
+    UNKNOWN = "unknown"
+
+
+class InterfaceMetrics(BaseModel):
+    """Per-interface traffic metrics collected by sidecar agent."""
+
+    name: str = Field(..., description="Interface name (e.g., ethernet-1/1, eth0, mgmt0)")
+    state: InterfaceState = Field(InterfaceState.UNKNOWN, description="Operational state")
+    rx_bps: float = Field(0.0, description="Receive bytes per second")
+    tx_bps: float = Field(0.0, description="Transmit bytes per second")
+    rx_pps: float = Field(0.0, description="Receive packets per second")
+    tx_pps: float = Field(0.0, description="Transmit packets per second")
+    rx_bytes_total: int = Field(0, description="Total bytes received")
+    tx_bytes_total: int = Field(0, description="Total bytes transmitted")
+    rx_packets_total: int = Field(0, description="Total packets received")
+    tx_packets_total: int = Field(0, description="Total packets transmitted")
+    rx_errors: int = Field(0, description="Receive errors")
+    tx_errors: int = Field(0, description="Transmit errors")
+    rx_dropped: int = Field(0, description="Receive dropped")
+    tx_dropped: int = Field(0, description="Transmit dropped")
+    last_updated: datetime = Field(default_factory=datetime.now)
+
+
+class InterfaceMetricsPush(BaseModel):
+    """Bulk push of interface metrics from sidecar agent."""
+
+    node_id: str = Field(..., description="Node identifier (must match an existing node)")
+    interfaces: list[InterfaceMetrics] = Field(..., description="Metrics for each interface")
+    poll_interval_ms: int = Field(1000, description="Polling interval used by sidecar")
+    data_source: str = Field("sysfs", description="Source: sysfs")
+
+
+class NodeInterfacesResponse(BaseModel):
+    """Response containing all interfaces for a node."""
+
+    node_id: str
+    node_label: str = ""
+    interfaces: list[InterfaceMetrics] = Field(default_factory=list)
+    count: int = 0
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class LabStatus(str, Enum):

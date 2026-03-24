@@ -5,7 +5,9 @@ Real-time network topology and link state monitoring for Kubernetes environments
 ## Features
 
 - Real-time link state tracking (active/idle/down)
-- Bandwidth metrics (rx/tx bps, packets, utilization)
+- Per-interface rx/tx metrics from real kernel counters — captures all traffic (ping, ssh, scp, routing protocols, etc.)
+- Sidecar agent injected via Clabernetes `extraContainers` — sees all interfaces (linecards, CPM, mgmt)
+- Configurable collection interval (`POLL_INTERVAL_MS`)
 - REST API and WebSocket streaming for Cytoscape visualization
 - Cilium Hubble integration for eBPF-based flow visibility
 - Multi-lab topology support with Clabernetes
@@ -44,21 +46,38 @@ curl http://<SERVICE_URL>/api/topology
 
 ## Configuration
 
-Key Helm values:
+### Interface Metrics (Sidecar)
 
-```bash
-helm install network-monitor helm/network-monitor \
-  --namespace network-monitor \
-  --create-namespace \
-  --set config.discoveryMode=hubble \
-  --set config.demoMode="true" \
-  --set service.type=LoadBalancer
+The sidecar agent is injected into every Clabernetes topology pod via `extraContainers`. Set it once in your Clabernetes Helm values — all topology pods get the sidecar automatically:
+
+```yaml
+# In Clabernetes Helm values:
+globalConfig:
+  deployment:
+    extraContainers:
+      - name: netmon-sidecar
+        image: ghcr.io/bayars/netmon-sidecar:latest
+        env:
+          - name: API_URL
+            value: "http://network-monitor.network-monitor.svc:8000"
+          - name: POLL_INTERVAL_MS
+            value: "2000"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
 ```
+
+See [k8s/sidecar-example.yaml](k8s/sidecar-example.yaml) for full examples.
+
+### Network Monitor Helm Values
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `config.discoveryMode` | `hubble` | `hubble` or `sysfs` |
-| `config.demoMode` | `"false"` | Initialize demo topology |
 | `config.logLevel` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `service.type` | `ClusterIP` | Service exposure type |
 | `ingress.enabled` | `false` | Enable Ingress |

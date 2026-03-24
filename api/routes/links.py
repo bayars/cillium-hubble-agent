@@ -36,21 +36,27 @@ async def get_links(
 
 
 @router.get(
-    "/{link_id:path}",
+    "/by-interface/{interface}",
     response_model=Link,
-    summary="Get link by ID",
-    description="Returns a specific link by its ID.",
+    summary="Get link by interface",
+    description="Find a link by interface name.",
 )
-async def get_link(link_id: str):
-    """Get a specific link."""
+async def get_link_by_interface(interface: str):
+    """Get link by interface name."""
     service = get_link_state_service()
-    link = await service.get_link(link_id)
+    link = await service.get_link_by_interface(interface)
 
     if not link:
-        raise HTTPException(status_code=404, detail=f"Link not found: {link_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No link found for interface: {interface}"
+        )
 
     return link
 
+
+# Sub-resource routes must be registered BEFORE the catch-all /{link_id:path}
+# because :path is greedy and would match "link1/metrics" as link_id.
 
 @router.get(
     "/{link_id:path}/metrics",
@@ -111,21 +117,19 @@ async def update_link_metrics(
     return await service.get_link(link_id)
 
 
+# Catch-all: must be LAST because {link_id:path} matches everything
 @router.get(
-    "/by-interface/{interface}",
+    "/{link_id:path}",
     response_model=Link,
-    summary="Get link by interface",
-    description="Find a link by interface name.",
+    summary="Get link by ID",
+    description="Returns a specific link by its ID.",
 )
-async def get_link_by_interface(interface: str):
-    """Get link by interface name."""
+async def get_link(link_id: str):
+    """Get a specific link."""
     service = get_link_state_service()
-    link = await service.get_link_by_interface(interface)
+    link = await service.get_link(link_id)
 
     if not link:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No link found for interface: {interface}"
-        )
+        raise HTTPException(status_code=404, detail=f"Link not found: {link_id}")
 
     return link

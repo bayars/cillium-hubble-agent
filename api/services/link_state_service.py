@@ -14,6 +14,7 @@ from typing import Optional
 
 from ..models.schemas import (
     Node, Link, LinkState, LinkMetrics, TopologyResponse, LinkStateEvent, InterfaceEvent,
+    InterfaceMetrics,
 )
 from .event_bus import get_event_bus
 
@@ -32,6 +33,7 @@ class LinkStateService:
         self._nodes: dict[str, Node] = {}
         self._links: dict[str, Link] = {}
         self._interface_to_link: dict[str, str] = {}  # interface -> link_id
+        self._node_interfaces: dict[str, dict[str, InterfaceMetrics]] = {}  # node_id -> {iface_name -> metrics}
         self._labs: set[str] = {"default"}  # Known lab names
         self._lock = asyncio.Lock()
         self._started_at = datetime.now()
@@ -231,6 +233,57 @@ class LinkStateService:
             "labs": list(self._labs),
             "uptime_seconds": (datetime.now() - self._started_at).total_seconds(),
         }
+
+    # =========================================================================
+    # Interface Metrics Methods (sidecar agent)
+    # =========================================================================
+
+    async def update_node_interfaces(
+        self,
+        node_id: str,
+        interfaces: list[InterfaceMetrics],
+    ) -> bool:
+        """
+        Update per-interface metrics for a node (from sidecar agent).
+
+        Returns True if node exists, False otherwise.
+        """
+        async with self._lock:
+            if node_id not in self._nodes:
+                return False
+
+            if node_id not in self._node_interfaces:
+                self._node_interfaces[node_id] = {}
+
+            for iface in interfaces:
+                self._node_interfaces[node_id][iface.name] = iface
+
+        await get_event_bus().publish(
+            "interface_metrics_updated",
+            {
+                "node_id": node_id,
+                "interfaces": [i.model_dump(mode="json") for i in interfaces],
+            },
+        )
+
+        return True
+
+    async def get_node_interfaces(
+        self, node_id: str
+    ) -> Optional[list[InterfaceMetrics]]:
+        """Get all interface metrics for a node. Returns None if node doesn't exist."""
+        async with self._lock:
+            if node_id not in self._nodes:
+                return None
+            ifaces = self._node_interfaces.get(node_id, {})
+            return list(ifaces.values())
+
+    async def get_node_interface(
+        self, node_id: str, iface_name: str
+    ) -> Optional[InterfaceMetrics]:
+        """Get metrics for a specific interface on a node."""
+        async with self._lock:
+            return self._node_interfaces.get(node_id, {}).get(iface_name)
 
     # =========================================================================
     # Lab Management Methods
