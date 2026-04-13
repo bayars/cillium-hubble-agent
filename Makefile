@@ -11,57 +11,44 @@
 # Variables
 # ---------------------------------------------------------------------------
 
-REGISTRY       ?= ghcr.io/bayars
-API_IMAGE      ?= $(REGISTRY)/network-monitor
-SIDECAR_IMAGE  ?= $(REGISTRY)/netmon-sidecar
-COLLECTOR_IMAGE?= $(REGISTRY)/netmon-collector
-TAG            ?= latest
-NAMESPACE      ?= network-monitor
-HELM_RELEASE   ?= network-monitor
-HELM_CHART     ?= helm/network-monitor
+REGISTRY        ?= ghcr.io/bayars
+SIDECAR_IMAGE   ?= $(REGISTRY)/netmon-sidecar
+COLLECTOR_IMAGE ?= $(REGISTRY)/netmon-collector
+TAG             ?= latest
+NAMESPACE       ?= network-monitor
+HELM_RELEASE    ?= network-monitor
+HELM_CHART      ?= helm/network-monitor
 
 # ---------------------------------------------------------------------------
 # Development
 # ---------------------------------------------------------------------------
 
 .PHONY: install
-install: ## Install dependencies
+install: ## Install dev dependencies
 	uv sync --dev
-
-.PHONY: dev
-dev: ## Run API server in development mode
-	uv run uvicorn api.main:app --reload
 
 .PHONY: lint
 lint: ## Run ruff linter
-	uv run ruff check api/ sidecar/ tests/ --exclude api/generated/
+	uv run ruff check sidecar/ tests/
 
 .PHONY: lint-fix
 lint-fix: ## Run ruff linter with auto-fix
-	uv run ruff check api/ sidecar/ tests/ --exclude api/generated/ --fix
+	uv run ruff check sidecar/ tests/ --fix
 
 .PHONY: test
 test: ## Run unit tests
-	uv run pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
-
-.PHONY: test-e2e
-test-e2e: ## Run e2e tests (requires running API)
-	uv run pytest tests/test_e2e.py -v
+	uv run pytest tests/ -v --tb=short
 
 .PHONY: test-ci
 test-ci: ## Run tests with JUnit output for CI
-	uv run pytest tests/ -v --tb=short --ignore=tests/test_e2e.py --junitxml=report.xml
+	uv run pytest tests/ -v --tb=short --junitxml=report.xml
 
 # ---------------------------------------------------------------------------
 # Docker
 # ---------------------------------------------------------------------------
 
 .PHONY: build
-build: build-api build-sidecar build-collector ## Build all Docker images
-
-.PHONY: build-api
-build-api: ## Build API Docker image
-	docker build -t $(API_IMAGE):$(TAG) .
+build: build-sidecar build-collector ## Build all Docker images
 
 .PHONY: build-sidecar
 build-sidecar: ## Build sidecar agent Docker image
@@ -72,11 +59,7 @@ build-collector: ## Build standalone collector Docker image
 	docker build -t $(COLLECTOR_IMAGE):$(TAG) -f sidecar/Dockerfile.collector .
 
 .PHONY: push
-push: push-api push-sidecar push-collector ## Push all Docker images
-
-.PHONY: push-api
-push-api: ## Push API Docker image
-	docker push $(API_IMAGE):$(TAG)
+push: push-sidecar push-collector ## Push all Docker images
 
 .PHONY: push-sidecar
 push-sidecar: ## Push sidecar agent Docker image
@@ -85,22 +68,6 @@ push-sidecar: ## Push sidecar agent Docker image
 .PHONY: push-collector
 push-collector: ## Push standalone collector Docker image
 	docker push $(COLLECTOR_IMAGE):$(TAG)
-
-# ---------------------------------------------------------------------------
-# Docker Compose
-# ---------------------------------------------------------------------------
-
-.PHONY: up
-up: ## Start services via docker-compose
-	docker-compose up -d
-
-.PHONY: down
-down: ## Stop services via docker-compose
-	docker-compose down
-
-.PHONY: logs
-logs: ## Tail docker-compose logs
-	docker-compose logs -f
 
 # ---------------------------------------------------------------------------
 # Helm / Kubernetes
@@ -114,23 +81,10 @@ helm-lint: ## Lint Helm chart
 helm-template: ## Render Helm chart templates
 	helm template $(HELM_RELEASE) $(HELM_CHART) --namespace $(NAMESPACE)
 
-.PHONY: helm-template-collector
-helm-template-collector: ## Render Helm chart with collector enabled
-	helm template $(HELM_RELEASE) $(HELM_CHART) --namespace $(NAMESPACE) \
-		--set collector.enabled=true \
-		--set collector.pollIntervalMs=2000
-
 .PHONY: deploy
-deploy: ## Deploy to Kubernetes via Helm
+deploy: ## Deploy to Kubernetes via Helm (installs Redis)
 	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
 		--namespace $(NAMESPACE) --create-namespace
-
-.PHONY: deploy-collector
-deploy-collector: ## Deploy with collector enabled
-	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
-		--namespace $(NAMESPACE) --create-namespace \
-		--set collector.enabled=true \
-		--set collector.pollIntervalMs=2000
 
 .PHONY: undeploy
 undeploy: ## Remove Helm release

@@ -1,0 +1,9 @@
+dependencies:
+- name: redis
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 20.13.4
+- name: grafana
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 8.4.6
+digest: sha256:9a86f5f80e7ee5ec66980558c9d5764c7fb2ee8da10cca00e2d2a9c958de2ad8
+generated: "2026-04-13T09:22:44.935232782-04:00"
