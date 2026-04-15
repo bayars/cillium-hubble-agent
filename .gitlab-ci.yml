@@ -6,7 +6,6 @@ stages:
 variables:
   PYTHON_VERSION: "3.11"
   HELM_VERSION: "3.14.0"
-  API_IMAGE: ${CI_REGISTRY_IMAGE}
   SIDECAR_IMAGE: ${CI_REGISTRY_IMAGE}/sidecar
   COLLECTOR_IMAGE: ${CI_REGISTRY_IMAGE}/collector
 
@@ -21,7 +20,7 @@ lint:
     - pip install uv
     - uv sync --dev
   script:
-    - uv run ruff check api/ sidecar/ tests/ --exclude api/generated/
+    - uv run ruff check sidecar/ tests/
 
 test:
   stage: test
@@ -30,9 +29,7 @@ test:
     - pip install uv
     - uv sync --dev
   script:
-    - uv run pytest tests/ -v --tb=short
-      --ignore=tests/test_e2e.py
-      --junitxml=report.xml
+    - uv run pytest tests/ -v --tb=short --junitxml=report.xml
   artifacts:
     when: always
     reports:
@@ -47,10 +44,6 @@ helm-lint:
   script:
     - helm lint helm/network-monitor
     - helm template test helm/network-monitor --namespace test
-    - helm template test helm/network-monitor
-      --namespace test
-      --set collector.enabled=true
-      --set collector.pollIntervalMs=1000
 
 # ---------------------------------------------------------------------------
 # Build Stage
@@ -68,12 +61,6 @@ helm-lint:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_MERGE_REQUEST_ID
-
-build-api:
-  extends: .docker-base
-  script:
-    - docker build -t ${API_IMAGE}:${CI_COMMIT_SHORT_SHA} .
-    - docker push ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
 
 build-sidecar:
   extends: .docker-base
@@ -106,19 +93,6 @@ build-collector:
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
-
-push-api:
-  extends: .release-docker
-  script:
-    - VERSION=${CI_COMMIT_TAG#v}
-    - docker build
-      -t ${API_IMAGE}:${VERSION}
-      -t ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
-      -t ${API_IMAGE}:latest
-      .
-    - docker push ${API_IMAGE}:${VERSION}
-    - docker push ${API_IMAGE}:${CI_COMMIT_SHORT_SHA}
-    - docker push ${API_IMAGE}:latest
 
 push-sidecar:
   extends: .release-docker
@@ -165,7 +139,6 @@ release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
-    - push-api
     - push-sidecar
     - push-collector
     - helm-push

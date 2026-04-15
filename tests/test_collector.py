@@ -5,14 +5,17 @@ Tests cover:
 - read_proc_net_dev: parsing /proc/net/dev output
 - compute_rates: rate computation with exclude filter
 - get_pods: kubectl pod discovery
-- push_metrics: HTTP push
+- write_to_redis: Redis Streams write with fakeredis
+- HTTP server: GET /interfaces and /health responses
 - main: entry point validation
 """
 
 import json
+import threading
+import urllib.request
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-import pytest
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,7 +23,7 @@ from sidecar.collector import (
     read_proc_net_dev,
     get_pods,
 )
-from sidecar.common import compute_rates, push_metrics
+from sidecar.common import compute_rates, write_to_redis
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +161,7 @@ def test_compute_rates_counter_wrap():
 
 
 def test_compute_rates_state_is_up():
-    """All interfaces from /proc/net/dev get state='up'."""
+    """All interfaces from /proc/net/dev get state='up' (no operstate file)."""
     curr = {
         "eth0": {"rx_bytes": 0, "tx_bytes": 0, "rx_packets": 0, "tx_packets": 0,
                  "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
@@ -174,16 +177,18 @@ def test_compute_rates_state_is_up():
 
 
 def test_get_pods_parses_output():
-    """Parses kubectl output into pod list."""
+    """Parses kubectl output into pod list with topology and node labels."""
     result = MagicMock()
-    result.stdout = "pod1 clab\\npod2 clab"
+    result.stdout = "srl-probe-test-srl1-abc default srl-probe-test srl1\\ndc1-spine1-xyz default dc1 spine1"
 
     with patch("sidecar.collector.subprocess.run", return_value=result):
-        pods = get_pods("clab", "clabernetes/app=clabernetes")
+        pods = get_pods("default", "clabernetes/app=clabernetes")
 
     assert len(pods) == 2
-    assert pods[0] == {"name": "pod1", "namespace": "clab"}
-    assert pods[1] == {"name": "pod2", "namespace": "clab"}
+    assert pods[0] == {"name": "srl-probe-test-srl1-abc", "namespace": "default",
+                       "topology": "srl-probe-test", "node": "srl1"}
+    assert pods[1] == {"name": "dc1-spine1-xyz", "namespace": "default",
+                       "topology": "dc1", "node": "spine1"}
 
 
 def test_get_pods_empty_output():
@@ -204,49 +209,87 @@ def test_get_pods_exception():
 
 
 # ---------------------------------------------------------------------------
-# push_metrics
+# write_to_redis (via shared common)
 # ---------------------------------------------------------------------------
 
 
-def test_push_metrics_payload():
-    """Sends correct JSON payload to API."""
-    captured = {}
+def test_write_to_redis_collector(redis_client):
+    """write_to_redis creates stream under nm:topo:{ns}:{topo}:{node}:{iface}."""
+    interfaces = [
+        {"name": "eth0", "rx_bps": 500.0, "tx_bps": 250.0,
+         "rx_bytes_total": 5000, "tx_bytes_total": 2500,
+         "rx_packets_total": 50, "tx_packets_total": 25,
+         "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0,
+         "state": "up", "rx_pps": 5.0, "tx_pps": 2.5},
+    ]
 
-    def mock_urlopen(req, timeout=None):
-        captured["url"] = req.full_url
-        captured["data"] = json.loads(req.data)
-        resp = MagicMock()
-        resp.status = 200
-        resp.__enter__ = lambda s: resp
-        resp.__exit__ = MagicMock(return_value=False)
-        return resp
+    write_to_redis(redis_client, "default/dc1/leaf1", interfaces)
 
-    interfaces = [{"name": "eth0", "rx_bps": 100}]
-
-    with patch("sidecar.common.urlopen", mock_urlopen):
-        push_metrics("http://api:8000", "clab/pod1", interfaces, 2000)
-
-    assert captured["url"] == "http://api:8000/api/interfaces"
-    assert captured["data"]["node_id"] == "clab/pod1"
-    assert captured["data"]["data_source"] == "sysfs"
+    entries = redis_client.xrange("nm:topo:default:dc1:leaf1:eth0")
+    assert len(entries) == 1
+    _, fields = entries[0]
+    assert fields["rx_bps"] == "500.0"
+    assert "name" not in fields
 
 
-def test_push_metrics_handles_error():
-    """URLError is caught gracefully."""
-    from urllib.error import URLError
-
-    with patch("sidecar.common.urlopen", side_effect=URLError("refused")):
-        push_metrics("http://api:8000", "clab/pod1", [], 2000)
+def test_write_to_redis_collector_none_client():
+    """write_to_redis is a no-op with None client."""
+    write_to_redis(None, "clab/leaf1", [{"name": "eth0"}])
 
 
 # ---------------------------------------------------------------------------
-# main() validation
+# HTTP server
 # ---------------------------------------------------------------------------
 
 
-def test_main_requires_api_url():
-    """main() exits if API_URL is not set."""
-    with patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(SystemExit):
-            from sidecar.collector import main
-            main()
+def _start_collector_server(nodes_data: dict) -> int:
+    """Start the collector HTTP server and return the port."""
+    import sidecar.collector as collector_mod
+    from http.server import HTTPServer
+    from sidecar.collector import MetricsHandler
+
+    with collector_mod.metrics_lock:
+        collector_mod.metrics_store.clear()
+        collector_mod.metrics_store.update(nodes_data)
+
+    server = HTTPServer(("127.0.0.1", 0), MetricsHandler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return port
+
+
+def test_collector_http_interfaces_endpoint():
+    """GET /interfaces returns all nodes with their interfaces."""
+    data = {
+        "clab/r1": [{"name": "eth0", "rx_bps": 100.0}],
+        "clab/r2": [{"name": "eth1", "rx_bps": 200.0}],
+    }
+    port = _start_collector_server(data)
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/interfaces")
+    body = json.loads(resp.read())
+
+    assert "nodes" in body
+    node_ids = {n["node_id"] for n in body["nodes"]}
+    assert "clab/r1" in node_ids
+    assert "clab/r2" in node_ids
+
+
+def test_collector_http_health_endpoint():
+    """GET /health returns {"status": "ok"}."""
+    port = _start_collector_server({})
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/health")
+    data = json.loads(resp.read())
+    assert data["status"] == "ok"
+
+
+def test_collector_http_404():
+    """Unknown paths return 404."""
+    port = _start_collector_server({})
+
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/unknown")
+        assert False, "Expected HTTPError"
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 404

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: network-monitor
-description: Real-time network interface monitoring system with Clabernetes lab management
+description: Clabernetes interface metrics — sidecar HTTP API + Redis time-series
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
@@ -9,5 +9,15 @@ keywords:
   - monitoring
   - containerlab
   - clabernetes
+  - redis
 maintainers:
-  - name: Network Monitor Team
+  - name: Safa Bayar
+dependencies:
+  - name: redis
+    version: "20.x.x"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: redis.enabled
+  - name: grafana
+    version: "8.x.x"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: grafana.enabled

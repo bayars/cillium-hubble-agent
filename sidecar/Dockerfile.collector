@@ -1,12 +1,15 @@
 FROM python:3.11-alpine
 
-# Install kubectl
+# Install kubectl and redis-py
 RUN apk add --no-cache curl && \
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    chmod +x kubectl && mv kubectl /usr/local/bin/
+    chmod +x kubectl && mv kubectl /usr/local/bin/ && \
+    pip install --no-cache-dir redis
 
 COPY sidecar/common.py /app/common.py
 COPY sidecar/collector.py /app/collector.py
 WORKDIR /app
+
+EXPOSE 9000
 
 CMD ["python", "-u", "collector.py"]

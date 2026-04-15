@@ -1,5 +1,5 @@
 """
-Tests for the sidecar agent (sidecar/agent.py).
+Tests for the sidecar agent (sidecar/agent.py) and shared utilities.
 
 Tests cover:
 - discover_interfaces: listing network interfaces from sysfs
@@ -7,16 +7,18 @@ Tests cover:
 - get_operstate: reading interface operational state
 - read_all_counters: bulk counter reads
 - compute_rates: rate computation from two counter snapshots
-- push_metrics: HTTP push to the API
+- write_to_redis: Redis Streams write with fakeredis
+- HTTP server: GET /interfaces and /health responses
 - main: entry point validation
 """
 
 import json
+import threading
+import urllib.request
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pytest
 
-# Import the module under test
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from sidecar.agent import (
@@ -25,7 +27,7 @@ from sidecar.agent import (
     get_operstate,
     read_all_counters,
 )
-from sidecar.common import compute_rates, push_metrics
+from sidecar.common import compute_rates, write_to_redis
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +37,6 @@ from sidecar.common import compute_rates, push_metrics
 
 def test_discover_interfaces(tmp_path):
     """Discovers interfaces that have a statistics/ subdirectory."""
-    # Create fake sysfs structure
     for iface in ("eth0", "eth1", "lo"):
         iface_dir = tmp_path / iface
         iface_dir.mkdir()
@@ -259,7 +260,7 @@ def test_compute_rates_zero_interval():
             "operstate": "up",
         },
     }
-    curr = dict(prev)  # same
+    curr = dict(prev)
 
     metrics = compute_rates(prev, curr, interval_s=0)
     assert metrics[0]["rx_bps"] == 0.0
@@ -268,36 +269,16 @@ def test_compute_rates_zero_interval():
 def test_compute_rates_multiple_interfaces():
     """Handles multiple interfaces in one call."""
     prev = {
-        "eth0": {
-            "rx_bytes": 0, "tx_bytes": 0,
-            "rx_packets": 0, "tx_packets": 0,
-            "rx_errors": 0, "tx_errors": 0,
-            "rx_dropped": 0, "tx_dropped": 0,
-            "operstate": "up",
-        },
-        "eth1": {
-            "rx_bytes": 0, "tx_bytes": 0,
-            "rx_packets": 0, "tx_packets": 0,
-            "rx_errors": 0, "tx_errors": 0,
-            "rx_dropped": 0, "tx_dropped": 0,
-            "operstate": "up",
-        },
+        "eth0": {"rx_bytes": 0, "tx_bytes": 0, "rx_packets": 0, "tx_packets": 0,
+                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0, "operstate": "up"},
+        "eth1": {"rx_bytes": 0, "tx_bytes": 0, "rx_packets": 0, "tx_packets": 0,
+                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0, "operstate": "up"},
     }
     curr = {
-        "eth0": {
-            "rx_bytes": 2000, "tx_bytes": 1000,
-            "rx_packets": 20, "tx_packets": 10,
-            "rx_errors": 0, "tx_errors": 0,
-            "rx_dropped": 0, "tx_dropped": 0,
-            "operstate": "up",
-        },
-        "eth1": {
-            "rx_bytes": 4000, "tx_bytes": 2000,
-            "rx_packets": 40, "tx_packets": 20,
-            "rx_errors": 0, "tx_errors": 0,
-            "rx_dropped": 0, "tx_dropped": 0,
-            "operstate": "up",
-        },
+        "eth0": {"rx_bytes": 2000, "tx_bytes": 1000, "rx_packets": 20, "tx_packets": 10,
+                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0, "operstate": "up"},
+        "eth1": {"rx_bytes": 4000, "tx_bytes": 2000, "rx_packets": 40, "tx_packets": 20,
+                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0, "operstate": "up"},
     }
 
     metrics = compute_rates(prev, curr, interval_s=1.0)
@@ -349,48 +330,161 @@ def test_compute_rates_new_interface_in_curr():
 
 
 # ---------------------------------------------------------------------------
-# push_metrics
+# write_to_redis
 # ---------------------------------------------------------------------------
 
 
-def test_push_metrics_success():
-    """Successful push sends correct JSON payload."""
-    captured = {}
+def test_write_to_redis_streams_data(redis_client):
+    """write_to_redis creates a Stream under nm:topo:{ns}:{topo}:{node}:{iface}."""
+    interfaces = [
+        {"name": "eth0", "rx_bps": 1000.0, "tx_bps": 500.0,
+         "rx_bytes_total": 10000, "tx_bytes_total": 5000,
+         "rx_packets_total": 100, "tx_packets_total": 50,
+         "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0,
+         "state": "up", "rx_pps": 10.0, "tx_pps": 5.0},
+    ]
 
-    def mock_urlopen(req, timeout=None):
-        captured["url"] = req.full_url
-        captured["method"] = req.method
-        captured["data"] = json.loads(req.data)
-        captured["headers"] = dict(req.headers)
-        resp = MagicMock()
-        resp.status = 200
-        resp.__enter__ = lambda s: resp
-        resp.__exit__ = MagicMock(return_value=False)
-        return resp
+    write_to_redis(redis_client, "default/srl-probe-test/srl1", interfaces)
 
-    interfaces = [{"name": "eth0", "rx_bps": 1000, "tx_bps": 500}]
-
-    with patch("sidecar.common.urlopen", mock_urlopen):
-        push_metrics("http://api:8000", "clab/spine1", interfaces, 2000)
-
-    assert captured["url"] == "http://api:8000/api/interfaces"
-    assert captured["method"] == "PUT"
-    assert captured["data"]["node_id"] == "clab/spine1"
-    assert captured["data"]["interfaces"] == interfaces
-    assert captured["data"]["poll_interval_ms"] == 2000
-    assert captured["data"]["data_source"] == "sysfs"
+    entries = redis_client.xrange("nm:topo:default:srl-probe-test:srl1:eth0")
+    assert len(entries) == 1
+    _, fields = entries[0]
+    assert fields["rx_bps"] == "1000.0"
+    assert fields["tx_bps"] == "500.0"
+    assert "name" not in fields  # name is the key suffix, not a field
 
 
-def test_push_metrics_api_error():
-    """URLError is caught and logged, no exception raised."""
-    from urllib.error import URLError
+def test_write_to_redis_indexes_node(redis_client):
+    """write_to_redis adds node to topology node-set and iface to iface-set."""
+    interfaces = [{"name": "eth0", "rx_bps": 0.0, "tx_bps": 0.0,
+                   "rx_bytes_total": 0, "tx_bytes_total": 0,
+                   "rx_packets_total": 0, "tx_packets_total": 0,
+                   "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0,
+                   "state": "up", "rx_pps": 0.0, "tx_pps": 0.0}]
 
-    def mock_urlopen(req, timeout=None):
-        raise URLError("Connection refused")
+    write_to_redis(redis_client, "default/dc1/leaf1", interfaces)
 
-    with patch("sidecar.common.urlopen", mock_urlopen):
-        # Should not raise
-        push_metrics("http://api:8000", "clab/spine1", [], 2000)
+    assert redis_client.sismember("nm:topologies", "default/dc1")
+    assert redis_client.sismember("nm:topo:default:dc1:nodes", "leaf1")
+    assert redis_client.sismember("nm:topo:default:dc1:leaf1:ifaces", "eth0")
+
+
+def test_write_to_redis_multiple_interfaces(redis_client):
+    """write_to_redis handles multiple interfaces in one call."""
+    interfaces = [
+        {"name": "eth0", "rx_bps": 100.0, "tx_bps": 50.0,
+         "rx_bytes_total": 0, "tx_bytes_total": 0, "rx_packets_total": 0, "tx_packets_total": 0,
+         "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0,
+         "state": "up", "rx_pps": 0.0, "tx_pps": 0.0},
+        {"name": "eth1", "rx_bps": 200.0, "tx_bps": 100.0,
+         "rx_bytes_total": 0, "tx_bytes_total": 0, "rx_packets_total": 0, "tx_packets_total": 0,
+         "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0,
+         "state": "up", "rx_pps": 0.0, "tx_pps": 0.0},
+    ]
+
+    write_to_redis(redis_client, "default/srl-probe-test/r1", interfaces)
+
+    assert len(redis_client.xrange("nm:topo:default:srl-probe-test:r1:eth0")) == 1
+    assert len(redis_client.xrange("nm:topo:default:srl-probe-test:r1:eth1")) == 1
+    ifaces = redis_client.smembers("nm:topo:default:srl-probe-test:r1:ifaces")
+    assert ifaces == {"eth0", "eth1"}
+
+
+def test_write_to_redis_none_client():
+    """write_to_redis is a no-op when redis_client is None."""
+    # Should not raise
+    write_to_redis(None, "clab/r1", [{"name": "eth0", "rx_bps": 0.0}])
+
+
+def test_write_to_redis_redis_error(redis_client, monkeypatch):
+    """write_to_redis silently catches Redis errors."""
+    def boom(*args, **kwargs):
+        raise Exception("connection lost")
+
+    monkeypatch.setattr(redis_client, "pipeline", boom)
+    # Should not raise
+    write_to_redis(redis_client, "default/srl-probe-test/r1", [{"name": "eth0", "rx_bps": 0.0}])
+
+
+def test_write_to_redis_bad_node_id(redis_client):
+    """write_to_redis skips write when node_id is not in ns/topology/node format."""
+    write_to_redis(redis_client, "bad-id", [{"name": "eth0"}])
+    assert redis_client.keys("nm:*") == []
+
+
+# ---------------------------------------------------------------------------
+# HTTP server
+# ---------------------------------------------------------------------------
+
+
+def _start_test_server(node: str, iface_data: list[dict]) -> int:
+    """Start the sidecar HTTP server in a daemon thread and return the port."""
+    import sidecar.agent as agent_mod
+    from http.server import HTTPServer
+    from sidecar.agent import MetricsHandler
+
+    agent_mod.node_id = node
+    with agent_mod.metrics_lock:
+        agent_mod.metrics_store.clear()
+        agent_mod.metrics_store.update({m["name"]: m for m in iface_data})
+
+    server = HTTPServer(("127.0.0.1", 0), MetricsHandler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return port
+
+
+def test_http_interfaces_endpoint():
+    """GET /interfaces returns node_id and interfaces JSON."""
+    ifaces = [{"name": "eth0", "rx_bps": 999.0, "tx_bps": 111.0}]
+    port = _start_test_server("clab/r1", ifaces)
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/interfaces")
+    data = json.loads(resp.read())
+
+    assert data["node_id"] == "clab/r1"
+    assert len(data["interfaces"]) == 1
+    assert data["interfaces"][0]["rx_bps"] == 999.0
+
+
+def test_http_root_endpoint():
+    """GET / returns the same response as /interfaces."""
+    ifaces = [{"name": "eth1", "rx_bps": 42.0}]
+    port = _start_test_server("clab/r2", ifaces)
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/")
+    data = json.loads(resp.read())
+    assert data["node_id"] == "clab/r2"
+
+
+def test_http_metrics_endpoint():
+    """GET /metrics returns the same response as /interfaces."""
+    ifaces = [{"name": "eth0", "rx_bps": 0.0}]
+    port = _start_test_server("clab/r3", ifaces)
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics")
+    data = json.loads(resp.read())
+    assert "interfaces" in data
+
+
+def test_http_health_endpoint():
+    """GET /health returns {"status": "ok"}."""
+    port = _start_test_server("clab/r4", [])
+
+    resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/health")
+    data = json.loads(resp.read())
+    assert data["status"] == "ok"
+
+
+def test_http_404():
+    """Unknown paths return 404."""
+    port = _start_test_server("clab/r5", [])
+
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/unknown")
+        assert False, "Expected HTTPError"
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -398,27 +492,16 @@ def test_push_metrics_api_error():
 # ---------------------------------------------------------------------------
 
 
-def test_main_requires_api_url():
-    """main() exits if API_URL is not set."""
-    env = {"POLL_INTERVAL_MS": "1000", "POD_NAME": "pod1", "POD_NAMESPACE": "ns1"}
-    with patch.dict("os.environ", env, clear=True):
+def test_main_requires_topology_env_vars():
+    """main() exits if TOPOLOGY_NAME, NODE_NAME, or POD_NAMESPACE are missing."""
+    with patch.dict("os.environ", {}, clear=True):
         with pytest.raises(SystemExit):
             from sidecar.agent import main
             main()
 
 
-def test_main_requires_node_id_or_pod_info():
-    """main() exits if neither NODE_ID nor POD_NAME+POD_NAMESPACE are set."""
-    env = {"API_URL": "http://localhost:8000", "POLL_INTERVAL_MS": "1000"}
-    with patch.dict("os.environ", env, clear=True):
-        with pytest.raises(SystemExit):
-            from sidecar.agent import main
-            main()
-
-
-def test_main_auto_detects_node_id(tmp_path):
-    """main() auto-detects node_id from POD_NAME + POD_NAMESPACE."""
-    # Create a fake interface so main doesn't exit on "no interfaces"
+def test_main_builds_node_id_from_labels(tmp_path):
+    """main() builds node_id as namespace/topology/node from Clabernetes label env vars."""
     iface_dir = tmp_path / "eth0"
     iface_dir.mkdir()
     stats = iface_dir / "statistics"
@@ -429,11 +512,12 @@ def test_main_auto_detects_node_id(tmp_path):
     (iface_dir / "operstate").write_text("up\n")
 
     env = {
-        "API_URL": "http://localhost:8000",
-        "POD_NAME": "my-pod",
-        "POD_NAMESPACE": "clab",
+        "POD_NAMESPACE": "default",
+        "TOPOLOGY_NAME": "srl-probe-test",
+        "NODE_NAME": "srl1",
         "POLL_INTERVAL_MS": "1000",
         "EXCLUDE_IFACES": "lo",
+        "API_PORT": "0",
     }
 
     call_count = {"n": 0}
@@ -446,12 +530,14 @@ def test_main_auto_detects_node_id(tmp_path):
     with patch.dict("os.environ", env, clear=True), \
          patch("sidecar.agent.SYSFS_NET", tmp_path), \
          patch("sidecar.agent.time.sleep", mock_sleep), \
-         patch("sidecar.agent.push_metrics") as mock_push:
+         patch("sidecar.agent.write_to_redis"):
         try:
-            from sidecar.agent import main
-            main()
+            import importlib
+            import sidecar.agent
+            importlib.reload(sidecar.agent)
+            sidecar.agent.main()
         except KeyboardInterrupt:
             pass
 
-    if mock_push.called:
-        assert mock_push.call_args[0][1] == "clab/my-pod"
+    import sidecar.agent as a
+    assert a.node_id == "default/srl-probe-test/srl1"
