@@ -11,11 +11,11 @@
 # Variables
 # ---------------------------------------------------------------------------
 
-REGISTRY       ?= ghcr.io/bayars
-API_IMAGE      ?= $(REGISTRY)/network-monitor
-SIDECAR_IMAGE  ?= $(REGISTRY)/netmon-sidecar
-COLLECTOR_IMAGE?= $(REGISTRY)/netmon-collector
-TAG            ?= latest
+REGISTRY        ?= ghcr.io/bayars
+SIDECAR_IMAGE   ?= $(REGISTRY)/netmon-sidecar
+COLLECTOR_IMAGE ?= $(REGISTRY)/netmon-collector
+HUBBLE_IMAGE    ?= $(REGISTRY)/netmon-hubble-collector
+TAG             ?= latest
 NAMESPACE      ?= network-monitor
 HELM_RELEASE   ?= network-monitor
 HELM_CHART     ?= helm/network-monitor
@@ -34,34 +34,26 @@ dev: ## Run API server in development mode
 
 .PHONY: lint
 lint: ## Run ruff linter
-	uv run ruff check api/ sidecar/ tests/ --exclude api/generated/
+	uv run ruff check sidecar/ hubble_collector/ tests/ --exclude api/generated/
 
 .PHONY: lint-fix
 lint-fix: ## Run ruff linter with auto-fix
-	uv run ruff check api/ sidecar/ tests/ --exclude api/generated/ --fix
+	uv run ruff check sidecar/ hubble_collector/ tests/ --exclude api/generated/ --fix
 
 .PHONY: test
 test: ## Run unit tests
-	uv run pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
-
-.PHONY: test-e2e
-test-e2e: ## Run e2e tests (requires running API)
-	uv run pytest tests/test_e2e.py -v
+	uv run pytest tests/ -v --tb=short
 
 .PHONY: test-ci
-test-ci: ## Run tests with JUnit output for CI
-	uv run pytest tests/ -v --tb=short --ignore=tests/test_e2e.py --junitxml=report.xml
+test-ci: ## Run tests with JUnit XML output for CI
+	uv run pytest tests/ -v --tb=short --junitxml=report.xml
 
 # ---------------------------------------------------------------------------
 # Docker
 # ---------------------------------------------------------------------------
 
 .PHONY: build
-build: build-api build-sidecar build-collector ## Build all Docker images
-
-.PHONY: build-api
-build-api: ## Build API Docker image
-	docker build -t $(API_IMAGE):$(TAG) .
+build: build-sidecar build-collector build-hubble ## Build all Docker images
 
 .PHONY: build-sidecar
 build-sidecar: ## Build sidecar agent Docker image
@@ -71,12 +63,12 @@ build-sidecar: ## Build sidecar agent Docker image
 build-collector: ## Build standalone collector Docker image
 	docker build -t $(COLLECTOR_IMAGE):$(TAG) -f sidecar/Dockerfile.collector .
 
-.PHONY: push
-push: push-api push-sidecar push-collector ## Push all Docker images
+.PHONY: build-hubble
+build-hubble: ## Build Hubble flow collector Docker image
+	docker build -t $(HUBBLE_IMAGE):$(TAG) -f hubble_collector/Dockerfile .
 
-.PHONY: push-api
-push-api: ## Push API Docker image
-	docker push $(API_IMAGE):$(TAG)
+.PHONY: push
+push: push-sidecar push-collector push-hubble ## Push all Docker images
 
 .PHONY: push-sidecar
 push-sidecar: ## Push sidecar agent Docker image
@@ -85,6 +77,10 @@ push-sidecar: ## Push sidecar agent Docker image
 .PHONY: push-collector
 push-collector: ## Push standalone collector Docker image
 	docker push $(COLLECTOR_IMAGE):$(TAG)
+
+.PHONY: push-hubble
+push-hubble: ## Push Hubble flow collector Docker image
+	docker push $(HUBBLE_IMAGE):$(TAG)
 
 # ---------------------------------------------------------------------------
 # Docker Compose
@@ -141,7 +137,7 @@ undeploy: ## Remove Helm release
 # ---------------------------------------------------------------------------
 
 .PHONY: ci
-ci: lint test helm-lint ## Run all CI checks locally
+ci: lint test helm-lint ## Run lint + test + helm-lint
 
 # ---------------------------------------------------------------------------
 # Clean
