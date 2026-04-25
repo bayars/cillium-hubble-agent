@@ -1,0 +1,111 @@
+---
+# ServiceAccount for Hubble collector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hubble-collector
+  namespace: network-monitor
+
+---
+# ClusterRole: read Connectivity CRs + pods cluster-wide, read Hubble TLS secret
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hubble-collector
+rules:
+  # Clabernetes Connectivity CRs (for VNI → interface mapping)
+  - apiGroups: ["clabernetes.containerlab.dev"]
+    resources: ["connectivities"]
+    verbs: ["get", "list", "watch"]
+  # Launcher pods (for pod → topology/node mapping)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Hubble TLS secrets (kube-system and wherever Cilium lives)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames:
+      - hubble-relay-client-certs
+      - hubble-server-certs
+      - cilium-ca
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hubble-collector
+subjects:
+  - kind: ServiceAccount
+    name: hubble-collector
+    namespace: network-monitor
+roleRef:
+  kind: ClusterRole
+  name: hubble-collector
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hubble-collector
+  namespace: network-monitor
+  labels:
+    app: hubble-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hubble-collector
+  template:
+    metadata:
+      labels:
+        app: hubble-collector
+    spec:
+      serviceAccountName: hubble-collector
+      containers:
+        - name: hubble-collector
+          image: ghcr.io/bayars/netmon-hubble-collector:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HUBBLE_RELAY_ADDR
+              value: "hubble-relay.kube-system.svc.cluster.local:4245"
+
+            # Set HUBBLE_TLS=true to enable TLS; certs are auto-fetched from K8s
+            - name: HUBBLE_TLS
+              value: "false"
+
+            # Override which K8s secret holds the TLS certs (optional)
+            # - name: HUBBLE_TLS_SECRET
+            #   value: "hubble-relay-client-certs"
+
+            # Namespace where Cilium is installed (for TLS secret lookup)
+            - name: CILIUM_NAMESPACE
+              value: "kube-system"
+
+            # Clabernetes namespace to watch; omit to watch all namespaces
+            # - name: WATCH_NAMESPACE
+            #   value: "default"
+
+            - name: TOPOLOGY_REFRESH_S
+              value: "30"
+            - name: FLUSH_INTERVAL_S
+              value: "5"
+            - name: IDLE_TIMEOUT_S
+              value: "10"
+            - name: LOG_LEVEL
+              value: "INFO"
+
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: network-monitor-redis-url
+                  key: redis-url
+                  optional: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
