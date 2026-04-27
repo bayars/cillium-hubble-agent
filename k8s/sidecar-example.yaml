@@ -1,13 +1,12 @@
 ---
 # =============================================================================
-# Option 1: Clabernetes extraContainers (RECOMMENDED)
+# Clabernetes extraContainers — inject the sidecar into all topology pods
 # =============================================================================
-# Set in your Clabernetes Helm values to inject the sidecar into ALL topology
-# pods automatically. No per-topology config needed.
 #
-# The sidecar shares the pod's network namespace, so it sees every interface
-# (linecards, CPM, mgmt, etc.) and captures ALL traffic — ping, ssh, scp,
-# routing protocols, iperf3, anything that touches the kernel network stack.
+# Apply the RBAC first (one-time per namespace):
+#   kubectl apply -f k8s/sidecar-rbac.yaml -n <topology-namespace>
+#
+# Then configure Clabernetes to inject the sidecar via globalConfig:
 #
 # helm upgrade clabernetes charts/clabernetes \
 #   -f clabernetes-values.yaml
@@ -18,84 +17,78 @@
 #     extraContainers:
 #       - name: netmon-sidecar
 #         image: ghcr.io/bayars/netmon-sidecar:latest
+#         serviceAccountName: netmon-sidecar
+#         ports:
+#           - containerPort: 9000
 #         env:
-#           - name: API_URL
-#             value: "http://network-monitor.network-monitor.svc:8000"
-#           - name: POLL_INTERVAL_MS
-#             value: "2000"
-#           - name: EXCLUDE_IFACES
-#             value: "lo"
-#           - name: POD_NAME
-#             valueFrom:
-#               fieldRef:
-#                 fieldPath: metadata.name
+#           # Topology identity — auto-detected from pod labels via downward API
 #           - name: POD_NAMESPACE
 #             valueFrom:
 #               fieldRef:
 #                 fieldPath: metadata.namespace
+#           - name: TOPOLOGY_NAME
+#             valueFrom:
+#               fieldRef:
+#                 fieldPath: metadata.labels['clabernetes/topologyOwner']
+#           - name: NODE_NAME
+#             valueFrom:
+#               fieldRef:
+#                 fieldPath: metadata.labels['clabernetes/topologyNode']
+#           # Redis (optional — HTTP endpoint works without it)
+#           - name: REDIS_URL
+#             valueFrom:
+#               secretKeyRef:
+#                 name: network-monitor-redis-url
+#                 key: redis-url
+#                 optional: true
+#           # Tuning
+#           - name: API_PORT
+#             value: "9000"
+#           - name: POLL_INTERVAL_MS
+#             value: "2000"
+#           - name: EXCLUDE_IFACES
+#             value: "lo,eth0"
+#           - name: CONNECTIVITY_REFRESH_S
+#             value: "60"
 #         resources:
 #           requests:
-#             cpu: 5m
-#             memory: 16Mi
+#             cpu: 10m
+#             memory: 24Mi
 #           limits:
-#             cpu: 50m
-#             memory: 32Mi
-#
-# monitoring:
-#   podMonitor:
-#     enabled: true
-#     interval: 15s
+#             cpu: 100m
+#             memory: 64Mi
 
 ---
 # =============================================================================
-# Option 2: Standalone Deployment (for non-Clabernetes environments)
+# How metrics are stored
 # =============================================================================
-# If you control the pod spec directly (regular Deployments, StatefulSets),
-# add the sidecar container alongside your application container.
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-network-device
-  namespace: my-namespace
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: my-network-device
-  template:
-    metadata:
-      labels:
-        app: my-network-device
-    spec:
-      containers:
-        # Your main application container
-        - name: network-device
-          image: quay.io/frrouting/frr:9.1.0
-
-        # Netmon sidecar — shares network namespace, reads kernel counters
-        - name: netmon-sidecar
-          image: ghcr.io/bayars/netmon-sidecar:latest
-          env:
-            - name: API_URL
-              value: "http://network-monitor.network-monitor.svc:8000"
-            - name: POLL_INTERVAL_MS
-              value: "2000"
-            - name: EXCLUDE_IFACES
-              value: "lo"
-            # Auto-detect node_id from Kubernetes downward API
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-          resources:
-            requests:
-              cpu: 5m
-              memory: 16Mi
-            limits:
-              cpu: 50m
-              memory: 32Mi
+#
+# The sidecar reads VXLAN interfaces (vx-{node}-{iface}) from the launcher
+# pod's network namespace. Linux VXLAN interface counters count inner (payload)
+# bytes, giving accurate per-link bandwidth/packet-rate for all NOS types:
+#   SR Linux, SR OS, SR SIM, vr-sros, FRR, VyOS — no per-NOS configuration.
+#
+# VXLAN interface names are mapped to logical names via the Clabernetes
+# Connectivity CR:
+#   vx-R1-e1-1-c1-1  →  logical: e1-1-c1-1  (node: R1)
+#
+# Redis key schema (if REDIS_URL is set):
+#   nm:topo:{namespace}:{topology}:{node}:{iface}  → Stream (time-series)
+#   nm:topo:{namespace}:{topology}:{node}:ifaces   → Set (interface index)
+#   nm:topo:{namespace}:{topology}:nodes            → Set (node index)
+#   nm:topologies                                   → Set (topology index)
+#
+# HTTP endpoint (always available, no Redis required):
+#   GET http://<pod-ip>:9000/interfaces
+#   → {"node_id": "clab/my-topo/R1", "interfaces": [{
+#        "name": "e1-1-c1-1", "source": "vxlan",
+#        "rx_bps": 12345.6, "tx_bps": 6789.0,
+#        "rx_pps": 10.0, "tx_pps": 5.0,
+#        "rx_bytes_total": ..., "tx_bytes_total": ...,
+#        "rx_errors": 0, "tx_errors": 0,
+#        "rx_dropped": 0, "tx_dropped": 0,
+#        "state": "up"
+#      }, ...]}
+#
+#   GET http://<pod-ip>:9000/health
+#   → {"status": "ok"}
