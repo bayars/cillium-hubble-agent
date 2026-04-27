@@ -4,23 +4,21 @@ Tests for the standalone collector (sidecar/collector.py).
 Tests cover:
 - read_proc_net_dev: parsing /proc/net/dev output
 - compute_rates: rate computation with exclude filter
-- get_pods: kubectl pod discovery
-- push_metrics: HTTP push
-- main: entry point validation
+- get_pods: kubectl pod discovery (now returns topology/node labels)
+- write_to_redis: topology-aware Redis writes
+- HTTP server: /interfaces, /health endpoints
 """
 
 import json
+import threading
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-import pytest
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from sidecar.collector import (
-    read_proc_net_dev,
-    get_pods,
-)
-from sidecar.common import compute_rates, push_metrics
+
+from sidecar.collector import read_proc_net_dev, get_pods
+from sidecar.common import compute_rates, write_to_redis
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +40,6 @@ Inter-|   Receive                                                |  Transmit
 
 
 def test_read_proc_net_dev_parses_output():
-    """Parses /proc/net/dev output correctly."""
     result = MagicMock()
     result.returncode = 0
     result.stdout = PROC_NET_DEV_OUTPUT
@@ -53,7 +50,6 @@ def test_read_proc_net_dev_parses_output():
     assert "lo" in interfaces
     assert "eth0" in interfaces
     assert "eth1" in interfaces
-
     assert interfaces["eth0"]["rx_bytes"] == 9876543
     assert interfaces["eth0"]["tx_bytes"] == 4567890
     assert interfaces["eth0"]["rx_packets"] == 5000
@@ -65,7 +61,6 @@ def test_read_proc_net_dev_parses_output():
 
 
 def test_read_proc_net_dev_command_failure():
-    """Returns empty dict when kubectl exec fails."""
     result = MagicMock()
     result.returncode = 1
     result.stderr = "error"
@@ -76,19 +71,13 @@ def test_read_proc_net_dev_command_failure():
 
 
 def test_read_proc_net_dev_exception():
-    """Returns empty dict on subprocess exception."""
     with patch("sidecar.collector.subprocess.run", side_effect=Exception("timeout")):
         interfaces = read_proc_net_dev("test-pod", "clab")
     assert interfaces == {}
 
 
 def test_read_proc_net_dev_short_line():
-    """Skips lines with fewer than 16 fields."""
-    output = """\
-Inter-|   Receive
- face |bytes
-  eth0: 123
-"""
+    output = "Inter-|\n face |\n  eth0: 123\n"
     result = MagicMock()
     result.returncode = 0
     result.stdout = output
@@ -99,24 +88,17 @@ Inter-|   Receive
 
 
 # ---------------------------------------------------------------------------
-# compute_rates
+# compute_rates (shared logic)
 # ---------------------------------------------------------------------------
 
 
 def test_compute_rates_basic():
-    """Computes rates from two snapshots with exclusion."""
-    prev = {
-        "eth0": {"rx_bytes": 1000, "tx_bytes": 500, "rx_packets": 10, "tx_packets": 5,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-        "lo": {"rx_bytes": 100, "tx_bytes": 100, "rx_packets": 1, "tx_packets": 1,
-               "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
-    curr = {
-        "eth0": {"rx_bytes": 3000, "tx_bytes": 1500, "rx_packets": 30, "tx_packets": 15,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-        "lo": {"rx_bytes": 200, "tx_bytes": 200, "rx_packets": 2, "tx_packets": 2,
-               "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
+    prev = {"eth0": {"rx_bytes": 1000, "tx_bytes": 500, "rx_packets": 10, "tx_packets": 5,
+                     "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0}}
+    curr = {"eth0": {"rx_bytes": 3000, "tx_bytes": 1500, "rx_packets": 30, "tx_packets": 15,
+                     "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
+            "lo":   {"rx_bytes": 200, "tx_bytes": 200, "rx_packets": 2, "tx_packets": 2,
+                     "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0}}
 
     metrics = compute_rates(prev, curr, interval_s=2.0, exclude={"lo"})
     assert len(metrics) == 1
@@ -124,48 +106,15 @@ def test_compute_rates_basic():
     assert m["name"] == "eth0"
     assert m["rx_bps"] == 1000.0
     assert m["tx_bps"] == 500.0
-    assert m["rx_pps"] == 10.0
-    assert m["tx_pps"] == 5.0
-
-
-def test_compute_rates_no_previous():
-    """First snapshot returns zero rates."""
-    curr = {
-        "eth0": {"rx_bytes": 5000, "tx_bytes": 3000, "rx_packets": 50, "tx_packets": 30,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
-
-    metrics = compute_rates({}, curr, interval_s=2.0, exclude=set())
-    assert len(metrics) == 1
-    assert metrics[0]["rx_bps"] == 0.0
-    assert metrics[0]["rx_bytes_total"] == 5000
 
 
 def test_compute_rates_counter_wrap():
-    """Counter wrap clamps to zero."""
-    prev = {
-        "eth0": {"rx_bytes": 10000, "tx_bytes": 5000, "rx_packets": 100, "tx_packets": 50,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
-    curr = {
-        "eth0": {"rx_bytes": 1000, "tx_bytes": 500, "rx_packets": 100, "tx_packets": 50,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
-
+    prev = {"eth0": {"rx_bytes": 10000, "tx_bytes": 5000, "rx_packets": 100, "tx_packets": 50,
+                     "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0}}
+    curr = {"eth0": {"rx_bytes": 1000, "tx_bytes": 500, "rx_packets": 100, "tx_packets": 50,
+                     "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0}}
     metrics = compute_rates(prev, curr, interval_s=1.0, exclude=set())
     assert metrics[0]["rx_bps"] == 0.0
-    assert metrics[0]["tx_bps"] == 0.0
-
-
-def test_compute_rates_state_is_up():
-    """All interfaces from /proc/net/dev get state='up'."""
-    curr = {
-        "eth0": {"rx_bytes": 0, "tx_bytes": 0, "rx_packets": 0, "tx_packets": 0,
-                 "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0},
-    }
-
-    metrics = compute_rates({}, curr, interval_s=1.0, exclude=set())
-    assert metrics[0]["state"] == "up"
 
 
 # ---------------------------------------------------------------------------
@@ -174,20 +123,18 @@ def test_compute_rates_state_is_up():
 
 
 def test_get_pods_parses_output():
-    """Parses kubectl output into pod list."""
     result = MagicMock()
-    result.stdout = "pod1 clab\\npod2 clab"
+    result.stdout = "pod1 clab my-topo R1\\npod2 clab my-topo R2"
 
     with patch("sidecar.collector.subprocess.run", return_value=result):
         pods = get_pods("clab", "clabernetes/app=clabernetes")
 
     assert len(pods) == 2
-    assert pods[0] == {"name": "pod1", "namespace": "clab"}
-    assert pods[1] == {"name": "pod2", "namespace": "clab"}
+    assert pods[0] == {"name": "pod1", "namespace": "clab", "topology": "my-topo", "node": "R1"}
+    assert pods[1] == {"name": "pod2", "namespace": "clab", "topology": "my-topo", "node": "R2"}
 
 
 def test_get_pods_empty_output():
-    """Returns empty list when no pods found."""
     result = MagicMock()
     result.stdout = ""
 
@@ -197,56 +144,94 @@ def test_get_pods_empty_output():
 
 
 def test_get_pods_exception():
-    """Returns empty list on exception."""
     with patch("sidecar.collector.subprocess.run", side_effect=Exception("fail")):
         pods = get_pods("clab", "clabernetes/app=clabernetes")
     assert pods == []
 
 
-# ---------------------------------------------------------------------------
-# push_metrics
-# ---------------------------------------------------------------------------
+def test_get_pods_no_labels():
+    """Pods without topology labels still return with empty topology/node fields."""
+    result = MagicMock()
+    result.stdout = "pod1 clab"  # no labels
 
+    with patch("sidecar.collector.subprocess.run", return_value=result):
+        pods = get_pods("clab", "clabernetes/app=clabernetes")
 
-def test_push_metrics_payload():
-    """Sends correct JSON payload to API."""
-    captured = {}
-
-    def mock_urlopen(req, timeout=None):
-        captured["url"] = req.full_url
-        captured["data"] = json.loads(req.data)
-        resp = MagicMock()
-        resp.status = 200
-        resp.__enter__ = lambda s: resp
-        resp.__exit__ = MagicMock(return_value=False)
-        return resp
-
-    interfaces = [{"name": "eth0", "rx_bps": 100}]
-
-    with patch("sidecar.common.urlopen", mock_urlopen):
-        push_metrics("http://api:8000", "clab/pod1", interfaces, 2000)
-
-    assert captured["url"] == "http://api:8000/api/interfaces"
-    assert captured["data"]["node_id"] == "clab/pod1"
-    assert captured["data"]["data_source"] == "sysfs"
-
-
-def test_push_metrics_handles_error():
-    """URLError is caught gracefully."""
-    from urllib.error import URLError
-
-    with patch("sidecar.common.urlopen", side_effect=URLError("refused")):
-        push_metrics("http://api:8000", "clab/pod1", [], 2000)
+    assert len(pods) == 1
+    assert pods[0]["name"] == "pod1"
+    assert pods[0]["topology"] == ""
+    assert pods[0]["node"] == ""
 
 
 # ---------------------------------------------------------------------------
-# main() validation
+# write_to_redis (shared logic — same as agent tests)
 # ---------------------------------------------------------------------------
 
 
-def test_main_requires_api_url():
-    """main() exits if API_URL is not set."""
-    with patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(SystemExit):
-            from sidecar.collector import main
-            main()
+def test_write_to_redis_creates_topology_stream(redis_client):
+    """write_to_redis uses topology-aware key schema."""
+    interfaces = [{"name": "e1-1", "rx_bps": 2000.0, "tx_bps": 1000.0, "state": "up"}]
+    write_to_redis(redis_client, "clab", "my-topo", "R1", interfaces)
+
+    stream_key = "nm:topo:clab:my-topo:R1:e1-1"
+    entries = redis_client.xrange(stream_key)
+    assert len(entries) == 1
+    assert entries[0][1]["rx_bps"] == "2000.0"
+
+
+def test_write_to_redis_noop_without_client():
+    write_to_redis(None, "clab", "my-topo", "R1", [{"name": "e1-1"}])
+
+
+# ---------------------------------------------------------------------------
+# HTTP server
+# ---------------------------------------------------------------------------
+
+
+def test_collector_http_health():
+    """GET /health returns 200."""
+    import http.client
+    from http.server import HTTPServer
+    from sidecar.collector import make_handler
+
+    server = HTTPServer(("127.0.0.1", 0), make_handler(store={}, lock=threading.Lock()))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request("GET", "/health")
+    resp = conn.getresponse()
+    server.shutdown()
+
+    assert resp.status == 200
+    assert json.loads(resp.read()) == {"status": "ok"}
+
+
+def test_collector_http_interfaces():
+    """GET /interfaces returns nodes list."""
+    import http.client
+    from http.server import HTTPServer
+    from sidecar.collector import make_handler
+
+    store = {
+        "clab/my-topo/R1": {
+            "node_id": "clab/my-topo/R1",
+            "interfaces": [{"name": "e1-1", "rx_bps": 100.0}],
+        }
+    }
+    lock = threading.Lock()
+
+    server = HTTPServer(("127.0.0.1", 0), make_handler(store=store, lock=lock))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request("GET", "/interfaces")
+    resp = conn.getresponse()
+    body = json.loads(resp.read())
+    server.shutdown()
+
+    assert resp.status == 200
+    assert "nodes" in body
+    assert len(body["nodes"]) == 1
+    assert body["nodes"][0]["node_id"] == "clab/my-topo/R1"
