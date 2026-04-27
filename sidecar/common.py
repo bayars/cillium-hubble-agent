@@ -1,15 +1,14 @@
 """
 Shared utilities for sidecar agent and standalone collector.
-
-Contains common rate computation and API push logic.
 """
 
-import json
 import logging
-from urllib.request import Request, urlopen
-from urllib.error import URLError
+import os
 
 logger = logging.getLogger(__name__)
+
+STREAM_MAXLEN = int(os.environ.get("REDIS_STREAM_MAXLEN", "43200"))
+KEY_PREFIX = "nm"
 
 
 def compute_rates(prev: dict, curr: dict, interval_s: float, exclude: set | None = None) -> list[dict]:
@@ -58,24 +57,36 @@ def compute_rates(prev: dict, curr: dict, interval_s: float, exclude: set | None
     return metrics
 
 
-def push_metrics(api_url: str, node_id: str, interfaces: list[dict], poll_interval_ms: int):
-    """Push interface metrics to the network-monitor API."""
-    url = f"{api_url}/api/interfaces"
-    payload = json.dumps({
-        "node_id": node_id,
-        "interfaces": interfaces,
-        "poll_interval_ms": poll_interval_ms,
-        "data_source": "sysfs",
-    }).encode()
+def write_to_redis(redis_client, namespace: str, topology: str, node: str,
+                   interfaces: list[dict]) -> None:
+    """
+    Pipeline XADD for all interfaces into topology-aware Redis Streams.
 
-    req = Request(url, data=payload, method="PUT")
-    req.add_header("Content-Type", "application/json")
+    Key schema:
+      nm:topo:{namespace}:{topology}:{node}:{iface}  → Stream
+      nm:topo:{namespace}:{topology}:{node}:ifaces   → Set (interface index)
+      nm:topo:{namespace}:{topology}:nodes            → Set (node index)
+      nm:topologies                                   → Set ("{ns}/{topo}" members)
 
+    Silent on failure — Redis is optional.
+    """
+    if redis_client is None:
+        return
     try:
-        with urlopen(req, timeout=5) as resp:
-            if resp.status == 200:
-                logger.debug(f"Pushed {len(interfaces)} interfaces for {node_id}")
-            else:
-                logger.warning(f"API returned {resp.status} for {node_id}")
-    except URLError as e:
-        logger.warning(f"Failed to push metrics for {node_id}: {e}")
+        pipe = redis_client.pipeline(transaction=False)
+        topo_key = f"{KEY_PREFIX}:topo:{namespace}:{topology}"
+        for iface in interfaces:
+            iface_name = iface["name"]
+            fields = {k: str(v) for k, v in iface.items() if k != "name"}
+            pipe.xadd(
+                f"{topo_key}:{node}:{iface_name}",
+                fields,
+                maxlen=STREAM_MAXLEN,
+                approximate=True,
+            )
+            pipe.sadd(f"{topo_key}:{node}:ifaces", iface_name)
+            pipe.sadd(f"{topo_key}:nodes", node)
+        pipe.sadd(f"{KEY_PREFIX}:topologies", f"{namespace}/{topology}")
+        pipe.execute()
+    except Exception as exc:
+        logger.warning("Redis write failed: %s", exc)

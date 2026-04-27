@@ -1,7 +1,14 @@
 FROM python:3.11-alpine
 
-COPY sidecar/common.py /app/common.py
-COPY sidecar/agent.py /app/agent.py
+RUN pip install --no-cache-dir redis kubernetes
+
 WORKDIR /app
 
-CMD ["python", "-u", "agent.py"]
+COPY sidecar/ /app/sidecar/
+
+ENV API_PORT=9000
+ENV LOG_LEVEL=INFO
+
+EXPOSE 9000
+
+CMD ["python", "-u", "-m", "sidecar.agent"]
